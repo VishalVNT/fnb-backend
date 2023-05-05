@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use DateTime;
 use App\Models\branch;
 use App\Models\Brand;
 use App\Models\Company;
 use App\Models\Supplier;
+use App\Models\DailyOpening;
 use App\Models\User;
 use App\Models\Category;
 use App\Models\purchase;
@@ -19,6 +21,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Throwable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class Api extends Controller
 {
@@ -834,9 +837,12 @@ class Api extends Controller
         }
     }
     // get company
-    public function getAllCompanies()
+    public function getAllCompanies(Request $request)
     {
-        $data = Company::where('status', 1)->get();
+        if (!empty($request->keyword))
+            $data = Company::where(['status' => 1, ['name', 'like', '%' . $request->keyword . '%']])->get();
+        else
+            $data = Company::where('status', 1)->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -918,7 +924,19 @@ class Api extends Controller
     // fetch Tp search
     public function fetchTPData(Request $request)
     {
-        $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.company_id' => $request->company_id, ['purchases.invoice_no', 'like', '%' . $request->keyword . '%']])->orderBy('id', 'DESC')->get();
+        $dateTime = new DateTime($request->date);
+        $date = $dateTime->format('Y-m-d');
+        if ($request->isInvoice == 0)
+            $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.mrp' => null, 'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC');
+        else
+            $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, ['purchases.mrp', '>=', 0], 'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC');
+        if (!empty($request->keyword))
+            $data->where('purchases.invoice_no', 'like', '%' . $request->keyword . '%');
+        if (!empty($request->date))
+            $data->whereDate('purchases.invoice_date', '=', $date);
+        // return $data->toSql();
+        $data = $data->get();
+
         if ($data) {
             return response()->json($data);
         } else {
@@ -931,7 +949,14 @@ class Api extends Controller
     // fetch sales search
     public function fetchSalesData(Request $request)
     {
-        $data = Sales::select('brands.name', 'sales.no_btl', 'sales.no_peg', 'sales.created_at', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, ['brands.name', 'like', '%' . $request->keyword . '%']])->orderBy('id', 'DESC')->get();
+        $dateTime = new DateTime($request->date);
+        $date = $dateTime->format('Y-m-d');
+        $data = Sales::select('brands.name', 'sales.no_btl', 'sales.no_peg', 'sales.created_at', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where('sales.company_id', $request->company_id)->orderBy('id', 'DESC');
+        if (!empty($request->keyword))
+            $data->where('brands.name', 'like', '%' . $request->keyword . '%');
+        if (!empty($request->date))
+            $data->whereDate('sales.sale_date', '=', $date);
+        $data = $data->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -1123,7 +1148,9 @@ class Api extends Controller
         $data = $request->validate([
             'category_id' => 'required',
             'company_id' => 'required',
-            // 'branch_id' => 'required',
+            'invoice_no' => Rule::unique('purchases')->where(function ($query) {
+                $query->where('status', 1);
+            }),
         ]);
         $isSaved = false;
         $brand = explode(',', $request->brand_id);
@@ -1132,10 +1159,11 @@ class Api extends Controller
         $data['court_fees'] = $request->court_fees;
         $data['tcs'] = $request->tcs;
         $data['total_amount'] = $request->total_amount;
-        $data['invoice_no'] = $request->invoice_no;
         $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date));
         $data['created_by'] = $request->user()->id;
         $data['batch_no'] = $request->batch_no;
+        $data['discount'] = $request->discount;
+        $data['vat'] = $request->vat;
         $data['vendor_id'] = $request->vendor_id;
         foreach ($brand as $key => $item) {
             $data['brand_id'] = $item;
@@ -1176,6 +1204,32 @@ class Api extends Controller
             ]);
             return response()->json([
                 'message' => 'TP Added',
+                'type' => 'success'
+            ], 201);
+        } else {
+            return response()->json([
+                'message' => 'Oops! Operation failed',
+                'type' => 'failed'
+            ], 401);
+        }
+    }
+    public function convertPurchase(Request $request)
+    {
+        $request->validate([
+            'id' => 'required',
+            'isInvoice' => 'required',
+        ]);
+        Purchase::where(['id' => $request->id])->update(['mrp' => $request->isInvoice == 1 ? null : 0]);
+        $log_save = SaveLog([
+            'user_type' => $request->user()->type,
+            'user_id' => $request->user()->id,
+            'ip' => $request->ip(),
+            'log' => 'converted purchase entry with purchase id :' . $request->id,
+            'platform' => 'web'
+        ]);
+        if ($log_save) {
+            return response()->json([
+                'message' => 'TP Updated',
                 'type' => 'success'
             ], 201);
         } else {
@@ -1235,7 +1289,7 @@ class Api extends Controller
                 'log' => 'updated purchase entry with purchase id :' . $request->id,
                 'platform' => 'web'
             ]);
-            if (($log_save)) {
+            if ($log_save) {
                 return response()->json([
                     'message' => 'TP Updated',
                     'type' => 'success'
@@ -1960,7 +2014,10 @@ class Api extends Controller
     }
     public function getPurchase(Request $request)
     {
-        $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC')->get();
+        if ($request->isInvoice == 0)
+            $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.mrp' => null, 'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC')->get();
+        else
+            $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, ['purchases.mrp', '>=', 0], 'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -2346,6 +2403,25 @@ class Api extends Controller
                 'message' => 'Oops! Operation failed',
                 'type' => 'failed'
             ], 401);
+        }
+    }
+    // fetch Tp search
+    public function fetchOpeningData(Request $request)
+    {
+        $data = $request->validate([
+            'company_id' => 'required'
+        ]);
+        if (!empty($request->keyword))
+            $data = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.qty', 'daily_openings.date')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->where(['company_id' => $data['company_id'], ['brands.name', 'like', '%' . $request->keyword . '%']])->orderBy('daily_openings.id', 'DESC')->groupBy(DB::raw("daily_openings.brand_id"))->get();
+        else
+            $data = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.qty', 'daily_openings.date')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->where(['company_id' => $data['company_id']])->orderBy('daily_openings.id', 'DESC')->groupBy(DB::raw("daily_openings.brand_id"))->get();
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
         }
     }
 }

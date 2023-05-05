@@ -49,7 +49,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::get('/getSupplier', [Api::class, 'getSupplier']);
     Route::get('/getBrand', [Api::class, 'getBrand']);
     Route::get('/getCategory', [Api::class, 'getCategory']);
-    Route::get('/getAllCompanies', [Api::class, 'getAllCompanies']);
+    Route::post('/getAllCompanies', [Api::class, 'getAllCompanies']);
     Route::get('/getCategoryOptions', [Api::class, 'getCategoryOptions']);
     Route::get('/getSupplierOptions', [Api::class, 'getSupplierOptions']);
     Route::get('/getSales', [Api::class, 'getSales']);
@@ -61,6 +61,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
 
     // new create or save Api
     Route::post('/company', [Api::class, 'company']);
+    Route::post('/updateCompany', [Api::class, 'updateCompany']);
     Route::post('/branch', [Api::class, 'branch']);
     Route::post('/user', [Api::class, 'user']);
     Route::post('/supplier', [Api::class, 'supplier']);
@@ -105,10 +106,12 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/getAllBrandSales', [Api::class, 'getAllBrandSales']);
     Route::post('/fetchPurchaseData', [Api::class, 'fetchPurchaseData']);
     Route::post('/updatePurchase', [Api::class, 'updatePurchase']);
+    Route::post('/convertPurchase', [Api::class, 'convertPurchase']);
     Route::post('/deleteTp', [Api::class, 'deleteTp']);
     Route::post('/deleteSale', [Api::class, 'deleteSale']);
     Route::post('/updateSales', [Api::class, 'updateSales']);
     Route::post('/AddTransaction', [Api::class, 'AddTransaction']);
+    Route::post('/fetchOpeningData', [Api::class, 'fetchOpeningData']);
 
     // bulk upload Api
     Route::post('/bulkStockImport', [Api::class, 'bulkStockImport']);

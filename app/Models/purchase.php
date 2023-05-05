@@ -22,6 +22,8 @@ class purchase extends Model
         'invoice_date',
 		'no_btl',
 		'batch_no',
+		'discount',
+		'vat',
 		'vendor_id',
     ];
 }
