@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use DateTime;
 use App\Models\branch;
 use App\Models\Brand;
+use App\Models\PurchaseList;
 use App\Models\Company;
 use App\Models\Supplier;
 use App\Models\DailyOpening;
@@ -16,6 +17,7 @@ use App\Models\Stock;
 use App\Models\Transaction;
 use App\Models\Sales;
 use App\Models\Recipe;
+use App\Models\Subcategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -333,6 +335,39 @@ class Api extends Controller
             ], 401);
         }
     }
+    public function bulkImportCategory(Request $request)
+    {
+        $dataArray = $request->data;
+        $success = 0;
+        $fail = 0;
+        foreach ($dataArray as $dataArr) {
+            $category = Category::select('id')->where([['name', 'like', '%' . $dataArr['name'] . '%'], 'status' => 1])->get()->count();
+            if ($category == 0) {
+                $data['name'] = $dataArr['name'];
+                $data['short_name'] = $dataArr['short_name'];
+                $data['created_by'] = $request->user()->id;
+                $brand = new Category($data);
+                if ($brand->save())
+                    $success++;
+                else
+                    $fail++;
+            } else {
+                $fail++;
+            }
+        }
+        $data_log = [
+            'user_type' => $request->user()->type,
+            'user_id' => $request->user()->id,
+            'ip' => $request->ip(),
+            'log' => 'bulk category imported' . $success . ' category added, ' . $fail . ' failed',
+            'platform' => 'web'
+        ];
+        SaveLog($data_log);
+        return response()->json([
+            'message' => $success . ' category added, ' . $fail . ' failed',
+            'type' => 'success'
+        ], 201);
+    }
     // update category
     public function updateCategory(Request $request)
     {
@@ -379,7 +414,7 @@ class Api extends Controller
             'short_name' => 'required|string',
             'btl_size' => 'required',
             'peg_size' => 'required',
-            'no_peg' => 'required',
+            'code' => 'required',
         ]);
         $isSaved = false;
         if ($request->isUpdate == 1) {
@@ -395,6 +430,7 @@ class Api extends Controller
             SaveLog($data_log);
         } else {
             $data['category_id'] = $request->category_id;
+            $data['subcategory_id'] = $request->type_id;
             $data['name'] = strtoupper($data['name']);
             $data['created_by'] = $request->user()->id;
             $brand = new Brand($data);
@@ -422,31 +458,64 @@ class Api extends Controller
             ], 401);
         }
     }
-    // manage_stock
+    public function bulkImportBrand(Request $request)
+    {
+        $dataArray = $request->data;
+        $success = 0;
+        $fail = 0;
+        foreach ($dataArray as $dataArr) {
+            $brand_id = Brand::select('id')->where([['name', 'like', '%' . $dataArr['brand_name'] . '%'], 'status' => 1])->get()->count();
+            if ($brand_id == 0) {
+                $category = Category::select('id')->where([['name', 'like', '%' . $dataArr['category'] . '%'], 'status' => 1])->get()->first();
+                $type = Subcategory::select('id')->where([['name', 'like', '%' . $dataArr['type'] . '%'], 'status' => 1])->get()->first();
+                $data['category_id'] = $category['id'];
+                $data['subcategory_id'] = $type['id'];
+                $data['name'] = $dataArr['brand_name'];
+                $data['short_name'] = $dataArr['short_name'];
+                $data['code'] = $dataArr['code'];
+                $data['btl_size'] = $dataArr['btl_size'];
+                $data['peg_size'] = $dataArr['peg_size'];
+                $data['created_by'] = $request->user()->id;
+                $brand = new Brand($data);
+                if ($brand->save())
+                    $success++;
+                else
+                    $fail++;
+            } else {
+                $fail++;
+            }
+        }
+        $data_log = [
+            'user_type' => $request->user()->type,
+            'user_id' => $request->user()->id,
+            'ip' => $request->ip(),
+            'log' =>  'bulk brand imported' . $success . ' category added, ' . $fail . ' failed',
+            'platform' => 'web'
+        ];
+        SaveLog($data_log);
+        return response()->json([
+            'message' => $success . ' brand added, ' . $fail . ' failed',
+            'type' => 'success'
+        ], 201);
+    }
 
+    // manage_stock
     public function manage_stock(Request $request)
     {
         $data = $request->validate([
             'company_id' => 'required',
-            // 'branch_id' => 'required',
             'category_id' => 'required',
             'brand_id' => 'required',
-            'btl' => 'required',
-            'peg' => 'required',
-            // 'physical_btl' => 'required',
-            // 'physical_peg' => 'required',
-            'cost_price' => 'required',
-            'btl_selling_price' => 'required',
-            'peg_selling_price' => 'required',
-
         ]);
-
+        $data['btl'] = $request->btl;
+        $data['peg'] = $request->peg;
+        $data['cost_price'] = $request->cost_price;
+        $data['btl_selling_price'] = $request->btl_selling_price;
+        $data['peg_selling_price'] = $request->peg_selling_price;
         $count = Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->get()->count();
         if ($count > 0) {
             $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $data['brand_id'])->get();
             $MlSize = ($brandSize[0]['btl_size'] * $data['btl']) + ($brandSize[0]['peg_size'] * $data['peg']);
-
-            // $physical_MlSize = ($brandSize[0]['btl_size'] * $data['physical_btl']) + ($brandSize[0]['peg_size'] * $data['physical_peg']);
             $store_btl = $request->store_btl;
             $store_peg = $request->store_peg;
             $bar1_btl = $request->bar1_btl;
@@ -454,18 +523,23 @@ class Api extends Controller
             $bar2_btl = $request->bar2_btl;
             $bar2_peg = $request->bar2_peg;
             //update stock
-            Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->update(['qty' => $MlSize, 'cost_price' => $data['cost_price'], 'btl_selling_price' => $data['btl_selling_price'], 'peg_selling_price' => $data['peg_selling_price'], 'store_btl' => $store_btl, 'store_peg' => $store_peg, 'bar1_btl' => $bar1_btl, 'bar1_peg' => $bar1_peg, 'bar2_btl' => $bar2_btl, 'bar2_peg' => $bar2_peg]);
+            Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->update(['qty' => $MlSize, 'cost_price' => $data['cost_price'], 'btl_selling_price' => $data['btl_selling_price'], 'peg_selling_price' => $data['peg_selling_price'], 'store_btl' => $store_btl, 'store_peg' => $store_peg, 'bar1_btl' => $bar1_btl, 'bar1_peg' => $bar1_peg, 'bar2_btl' => $bar2_btl, 'bar2_peg' => $bar2_peg, 'physical_closing' => $MlSize]);
         } else {
             $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $data['brand_id'])->get();
             $MlSize = ($brandSize[0]['btl_size'] * $data['btl']) + ($brandSize[0]['peg_size'] * $data['peg']);
-            // $physical_MlSize = ($brandSize[0]['btl_size'] * $data['physical_btl']) + ($brandSize[0]['peg_size'] * $data['physical_peg']);
             $data['qty'] = $MlSize;
             //Stock entry
-            // $data['physical_closing'] = $physical_MlSize;
+            $data['physical_closing'] = $MlSize;
             $manage_stock = new Stock($data);
             $manage_stock->save();
         }
-
+        // update daily opening table for storing entry history
+        $opening['company_id'] = $request->company_id;
+        $opening['brand_id'] = $request->brand_id;
+        $opening['qty'] = $MlSize;
+        $opening['date'] = date('Y-m-d');
+        $saveOpening = new DailyOpening($opening);
+        $saveOpening->save();
         $data_log = [
             'user_type' => $request->user()->type,
             'user_id' => $request->user()->id,
@@ -926,15 +1000,18 @@ class Api extends Controller
     {
         $dateTime = new DateTime($request->date);
         $date = $dateTime->format('Y-m-d');
+        $dateTime2 = new DateTime($request->date2);
+        $date2 = $dateTime2->format('Y-m-d');
         if ($request->isInvoice == 0)
-            $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.mrp' => null, 'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC');
+            $data = PurchaseList::where(['status' => 1, 'isInvoice' => 0, 'company_id' => $request->company_id])->orderBy('id', 'DESC');
         else
-            $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, ['purchases.mrp', '>=', 0], 'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC');
+            $data = PurchaseList::where(['status' => 1, 'isInvoice' => 1, 'company_id' => $request->company_id])->orderBy('id', 'DESC');
         if (!empty($request->keyword))
-            $data->where('purchases.invoice_no', 'like', '%' . $request->keyword . '%');
-        if (!empty($request->date))
-            $data->whereDate('purchases.invoice_date', '=', $date);
-        // return $data->toSql();
+            $data->where('invoice_no', 'like', '%' . $request->keyword . '%');
+        if (!empty($request->date2)) {
+            $data->where('invoice_date', '>', $date);
+            $data->where('invoice_date', '<', $date2);
+        }
         $data = $data->get();
 
         if ($data) {
@@ -1009,7 +1086,7 @@ class Api extends Controller
     // get getBrand
     public function getBrand()
     {
-        $data = Brand::select('categories.name as c_name', 'brands.*')->join('categories', 'brands.category_id', '=', 'categories.id')->where('brands.status', 1)->get();
+        $data = Brand::select('categories.name as c_name', 'subcategories.name as s_name', 'brands.*')->join('categories', 'brands.category_id', '=', 'categories.id')->join('subcategories', 'brands.subcategory_id', '=', 'subcategories.id')->where('brands.status', 1)->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -1049,6 +1126,58 @@ class Api extends Controller
                 'type' => 'failed'
             ]);
         }
+    }
+    public function getTypeOptions()
+    {
+        $data = Subcategory::select('*', 'name as label')->where('status', 1)->get();
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
+    }
+    public function subcategory(Request $request)
+    {
+        $data = $request->validate([
+            'name' => 'required|string',
+            'short_name' => 'required|string',
+        ]);
+        $isSaved = false;
+        $data['created_by'] = $request->user()->id;
+        $data['status'] = 1;
+        if ($request->update == 1) {
+            $data = Subcategory::where('id', $request->id)->update($data);
+            if ($data)
+                $isSaved = true;
+        } else {
+            $subcategory = new Subcategory($data);
+            if ($subcategory->save())
+                $isSaved = true;
+        }
+        if ($isSaved) {
+            $data_log = [
+                'user_type' => $request->user()->type,
+                'user_id' => $request->user()->id,
+                'ip' => $request->ip(),
+                'log' => 'Brand Type created',
+                'platform' => 'web'
+            ];
+            $log_save = SaveLog($data_log);
+            if (($log_save)) {
+
+                return response()->json([
+                    'message' => 'Type Saved',
+                    'type' => 'success'
+                ], 201);
+            }
+        }
+        return response()->json([
+            'message' => 'Oops! Operation failed',
+            'type' => 'failed'
+        ], 401);
     }
     public function deleteCompanies(Request $request)
     {
@@ -1124,6 +1253,25 @@ class Api extends Controller
             ]);
         }
     }
+    public function deleteSubCategory(Request $request)
+    {
+        error_reporting(0);
+        $data = $request->validate([
+            'id' => 'required'
+        ]);
+        $task = Subcategory::where('id', $data['id'])->update(['status' => 0]);
+        if ($task) {
+            return response()->json([
+                'message' => 'Subcategory deleted',
+                'type' => 'success'
+            ], 201);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
+    }
     public function deleteBrand(Request $request)
     {
         error_reporting(0);
@@ -1146,7 +1294,6 @@ class Api extends Controller
     public function purchase(Request $request)
     {
         $data = $request->validate([
-            'category_id' => 'required',
             'company_id' => 'required',
             'invoice_no' => Rule::unique('purchases')->where(function ($query) {
                 $query->where('status', 1);
@@ -1165,12 +1312,17 @@ class Api extends Controller
         $data['discount'] = $request->discount;
         $data['vat'] = $request->vat;
         $data['vendor_id'] = $request->vendor_id;
+        $data['total_item'] = count($brand);
+        $data['isInvoice'] = $data['total_amount'] > 0 ? 1 : 0;
+        $purchase = new PurchaseList($data);
+        $purchase->save();
         foreach ($brand as $key => $item) {
             $data['brand_id'] = $item;
             $data['no_btl'] = $nobtl[$key];
-            $brandSize = Brand::select('btl_size')->where('id', $data['brand_id'])->get();
+            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $data['brand_id'])->get();
             $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
             $data['qty'] = $MlSize;
+            $data['category_id'] = $brandSize[0]['category_id'];
             $save = new purchase($data);
             if ($save->save()) {
                 $isSaved = true;
@@ -1194,6 +1346,7 @@ class Api extends Controller
             }
         }
         if ($isSaved) {
+
             // logs
             SaveLog([
                 'user_type' => $request->user()->type,
@@ -1219,12 +1372,12 @@ class Api extends Controller
             'id' => 'required',
             'isInvoice' => 'required',
         ]);
-        Purchase::where(['id' => $request->id])->update(['mrp' => $request->isInvoice == 1 ? null : 0]);
+        PurchaseList::where(['invoice_no' => $request->id])->update(['isInvoice' =>  $request->isInvoice]);
         $log_save = SaveLog([
             'user_type' => $request->user()->type,
             'user_id' => $request->user()->id,
             'ip' => $request->ip(),
-            'log' => 'converted purchase entry with purchase id :' . $request->id,
+            'log' => 'converted purchase entry with invoice no :' . $request->id,
             'platform' => 'web'
         ]);
         if ($log_save) {
@@ -1242,64 +1395,78 @@ class Api extends Controller
     public function updatePurchase(Request $request)
     {
         $data = $request->validate([
-            'category_id' => 'required',
-            'brand_id' => 'required',
             'company_id' => 'required',
         ]);
-        $data['mrp'] = $request->mrp;
+
         $data['court_fees'] = $request->court_fees;
         $data['tcs'] = $request->tcs;
         $data['total_amount'] = $request->total_amount;
         $data['invoice_no'] = $request->invoice_no;
         $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date));
         $data['created_by'] = $request->user()->id;
-        $data['no_btl'] = $request->no_btl; //number of btl
         $data['batch_no'] = $request->batch_no;
         $data['vendor_id'] = $request->vendor_id;
-
-        $stockEntry = Purchase::select('no_btl')->where(['id' => $request->id])->get();
-        if (count($stockEntry) > 0) {
-            Purchase::where(['id' => $request->id])->update($data);
-            // check stock
-            $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $request->brand_id])->get()->count();
-            $brandSize = Brand::select('btl_size')->where('id', $data['brand_id'])->get();
+        $brand = explode(',', $request->brand_id);
+        $nobtl = explode(',', $request->nobtl);
+        $p_Id = explode(',', $request->id);
+        $data['total_item'] = count($brand);
+        $data['isInvoice'] = $data['total_amount'] > 0 ? 1 : 0;
+        $stockEntry = Purchase::select('no_btl')->where(['invoice_no' => $request->invoice_no])->get();
+        PurchaseList::where(['invoice_no' => $request->invoice_no])->update($data);
+        $data['mrp'] = $request->mrp;
+        foreach ($brand as $key => $item) {
+            unset($data['total_item']);
+            unset($data['isInvoice']);
+            $data['brand_id'] = $item;
+            $data['no_btl'] = $nobtl[$key];
+            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $data['brand_id'])->get();
             $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
-            $OldMlSize = ($brandSize[0]['btl_size'] * $stockEntry[0]['no_btl']);
-            if ($count > 0) {
-                Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->decrement('qty', $OldMlSize);
-                //update stock
-                Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->increment('qty', $MlSize);
+            $data['qty'] = $MlSize;
+            $data['category_id'] = $brandSize[0]['category_id'];
+            $purchaseId = $p_Id[$key];
+            if ($purchaseId > 0) {
+                Purchase::where(['id' => $purchaseId])->update($data);
+                $stockEntry = Purchase::select('no_btl')->where(['invoice_no' => $request->invoice_no, 'brand_id' => $data['brand_id']])->get();
+                if (count($stockEntry) > 0) {
+                    $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $request->brand_id])->get()->count();
+                    $brandSize = Brand::select('btl_size')->where('id', $data['brand_id'])->get();
+                    $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
+                    $OldMlSize = ($brandSize[0]['btl_size'] * $stockEntry[0]['no_btl']);
+                    if ($count > 0) {
+                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->decrement('qty', $OldMlSize);
+                        //update stock
+                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->increment('qty', $MlSize);
+                    } else {
+                        //Stock entry
+                        $stock = new Stock(array(
+                            'company_id' => $request->company_id,
+                            //'branch_id' => $request->branch_id,
+                            'category_id' => $request->category_id,
+                            'brand_id' => $request->brand_id,
+                            'qty' => $MlSize,
+                            'cost_price' => $request->mrp,
+                        ));
+                        $stock->save();
+                    }
+                }
             } else {
-                //Stock entry
-                $stock = new Stock(array(
-                    'company_id' => $request->company_id,
-                    //'branch_id' => $request->branch_id,
-                    'category_id' => $request->category_id,
-                    'brand_id' => $request->brand_id,
-                    'qty' => $MlSize,
-                    'cost_price' => $request->mrp,
-                ));
-                $stock->save();
+                $save = new Purchase($data);
+                if ($save->save())
+                    Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->increment('qty', $MlSize);
             }
-            // logs
-            $log_save = SaveLog([
-                'user_type' => $request->user()->type,
-                'user_id' => $request->user()->id,
-                'ip' => $request->ip(),
-                'log' => 'updated purchase entry with purchase id :' . $request->id,
-                'platform' => 'web'
-            ]);
-            if ($log_save) {
-                return response()->json([
-                    'message' => 'TP Updated',
-                    'type' => 'success'
-                ], 201);
-            } else {
-                return response()->json([
-                    'message' => 'Oops! Operation failed',
-                    'type' => 'failed'
-                ], 401);
-            }
+        }
+        $log_save = SaveLog([
+            'user_type' => $request->user()->type,
+            'user_id' => $request->user()->id,
+            'ip' => $request->ip(),
+            'log' => 'updated purchase entry with purchase id :' . $request->id,
+            'platform' => 'web'
+        ]);
+        if ($log_save) {
+            return response()->json([
+                'message' => 'TP Updated',
+                'type' => 'success'
+            ], 201);
         } else {
             return response()->json([
                 'message' => 'Oops! Operation failed',
@@ -1312,20 +1479,42 @@ class Api extends Controller
         $data = $request->validate([
             'id' => 'required'
         ]);
-        $stockEntry = Purchase::select('no_btl', 'company_id', 'brand_id')->where(['id' => $request->id])->get();
+        $stockEntry = Purchase::select('no_btl', 'qty', 'company_id', 'invoice_no', 'brand_id')->where(['id' => $request->id])->get();
         if (count($stockEntry) > 0) {
             // check stock
-            $brandSize = Brand::select('btl_size')->where('id', $stockEntry[0]['brand_id'])->get();
-            $OldMlSize = ($brandSize[0]['btl_size'] * $stockEntry[0]['no_btl']);
-            //update stock
-            Stock::where(['company_id' => $stockEntry[0]['company_id'],  'brand_id' => $stockEntry[0]['brand_id']])->decrement('qty', $OldMlSize);
+            Stock::where(['company_id' => $stockEntry[0]['company_id'],  'brand_id' => $stockEntry[0]['brand_id']])->decrement('qty', $stockEntry[0]['qty']);
             $data = Purchase::where('id', $data['id'])->update(['status' => 0]);
             if ($data) {
+                PurchaseList::where('invoice_no', $stockEntry[0]['invoice_no'])->decrement('total_item', 1);
                 return response()->json([
                     'message' => 'Purchase deleted',
                     'type' => 'success'
                 ], 201);
             }
+        }
+        return response()->json([
+            'message' => 'Oops! operation failed!',
+            'type' => 'failed'
+        ]);
+    }
+    public function deleteTpList(Request $request)
+    {
+        $data = $request->validate([
+            'invoice' => 'required'
+        ]);
+        $isDelete = false;
+        $stockEntries = Purchase::select('no_btl', 'company_id', 'qty', 'invoice_no', 'brand_id')->where(['invoice_no' => $request->invoice])->get();
+        foreach ($stockEntries as $key => $stockEntry) {
+            Stock::where(['company_id' => $stockEntry['company_id'],  'brand_id' => $stockEntry['brand_id']])->decrement('qty', $stockEntry['qty']);
+            if (Purchase::where('invoice_no', $data['invoice'])->update(['status' => 0]))
+                $isDelete = true;
+        }
+        if ($isDelete) {
+            PurchaseList::where('invoice_no', $data['invoice'])->update(['status' => 0]);
+            return response()->json([
+                'message' => 'Purchase deleted',
+                'type' => 'success'
+            ], 201);
         }
         return response()->json([
             'message' => 'Oops! operation failed!',
@@ -1370,7 +1559,7 @@ class Api extends Controller
     }
     public function getAllBrandOption(Request $request)
     {
-        $brands = Brand::select('name as value', 'name as label', 'id', 'category_id', DB::raw('0 as recipe'))->where(['status' => 1])->get();
+        $brands = Brand::select('name as value', 'id', 'category_id', DB::raw('CONCAT(name," - ",code) as label'), DB::raw('0 as recipe'))->where(['status' => 1])->get();
         if ($brands) {
             return response()->json($brands);
         } else {
@@ -1383,7 +1572,7 @@ class Api extends Controller
     public function getAllBrandSales(Request $request)
     {
         $dataArray = array();
-        $brands = Brand::select('name as value', 'name as label', 'brands.id', 'brands.category_id', DB::raw('0 as recipe'))->join('stocks', 'stocks.brand_id', '=', 'brands.id')->where(['brands.status' => 1, 'stocks.company_id' => $request->company_id])->get();
+        $brands = Brand::select('name as value', DB::raw('CONCAT(name," - ",code) as label'), 'brands.id', 'brands.category_id', DB::raw('0 as recipe'))->join('stocks', 'stocks.brand_id', '=', 'brands.id')->where(['brands.status' => 1, 'stocks.company_id' => $request->company_id])->get();
         if ($brands) {
             foreach ($brands as $brand) {
                 array_push($dataArray, $brand);
@@ -1646,20 +1835,23 @@ class Api extends Controller
             // 'branch_id' => 'required',
             'brand_id' => 'required',
         ]);
+        $response = [];
         $data = Stock::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get();
-        $result = getBtlPeg($req['brand_id'], $data[0]['qty']);
+        $qty = !empty($data[0]['qty']) ? $data[0]['qty'] : 0;
+        $openingQty = !empty($data[0]['physical_closing']) ? $data[0]['physical_closing'] : 0;
+        $result = getBtlPeg($req['brand_id'], $qty);
+        $opening = getBtlPeg($req['brand_id'], $openingQty);
+        if (empty($result['btl'])) {
+            $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $req['brand_id'])->get();
+            array_push($response, array('btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size']));
+            return $response;
+        }
+        $data[0]['op_btl'] = $opening['btl'];
+        $data[0]['op_peg'] = intval($opening['peg']);
+
         $data[0]['btl'] = $result['btl'];
         $data[0]['peg'] = intval($result['peg']);
-        $data[0]['btl_size'] = intval($result['btl_size']);
-        //physical stock
-        // $p_btl = 0;
-        // while ($physical_qty > $brand_size) {
-        //     $physical_qty = $physical_qty - $brand_size;
-        //     $p_btl++;
-        // }
-        // $physical_peg = $physical_qty / $brandSize[0]['peg_size'];
-        // $data[0]['physical_btl'] = $p_btl;
-        // $data[0]['physical_peg'] = intval($physical_peg);
+        $data[0]['btl_size'] = $result['btl_size'];
         if ($data) {
             return response()->json($data);
         } else {
@@ -1675,18 +1867,19 @@ class Api extends Controller
     }
     public function bulkStockImport(Request $request)
     {
+        error_reporting(0);
         $dataArray = $request->data;
         $company_id = $dataArray[0]['company_id'];
         // $branch_id = $dataArray[0]['branch_id'];
         $isSaved = false;
         foreach ($dataArray as $dataArr) {
-            $brandName = rtrim(preg_replace("/[^\W\d]*\d\w*/", " ", $dataArr['brand']));
+            $brandName = $dataArr['brand'];
             $total = explode('.', $dataArr['total']);
             $btl = intval($total[0]);
             $peg = intval($total[1]);
             $data['company_id'] = $company_id;
             //$data['branch_id'] = $branch_id;
-            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%'], 'btl_size' => $dataArr['ml']])->get();
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%']])->get();
             if (count($brandSize) > 0) {
                 $count = Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->get()->count();
                 $MlSize = ($brandSize[0]['btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
@@ -1694,13 +1887,24 @@ class Api extends Controller
                 $data['brand_id'] = $brandSize[0]['id'];
                 if ($count > 0) {
                     //update stock
-                    Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->update(['qty' => $MlSize]);
+                    Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->update(['qty' => $MlSize, 'physical_closing' => $MlSize, 'cost_price' => $dataArr['cost_price'], 'btl_selling_price' => $dataArr['btl_selling_price'], 'peg_selling_price' => $dataArr['peg_selling_price']]);
                 } else {
                     $data['qty'] = $MlSize;
+                    $data['physical_closing'] = $MlSize;
+                    $data['cost_price'] = $dataArr['cost_price'];
+                    $data['btl_selling_price'] = $dataArr['btl_selling_price'];
+                    $data['peg_selling_price'] = $dataArr['peg_selling_price'];
                     //Stock entry
                     // $data['physical_closing'] = $MlSize;
                     $manage_stock = new Stock($data);
-                    $manage_stock->save();
+                    if ($manage_stock->save()) {
+                        $opening['company_id'] = $company_id;
+                        $opening['brand_id'] = $brandSize[0]['id'];
+                        $opening['qty'] = $MlSize;
+                        $opening['date'] = date('Y-m-d', strtotime($dataArr['date'] . ' +1 day'));
+                        $saveOpening = new DailyOpening($opening);
+                        $saveOpening->save();
+                    }
                 }
                 $isSaved = true;
             }
@@ -1733,12 +1937,15 @@ class Api extends Controller
         $isSaved = false;
         $counter = 0;
         $skipped = 0;
-
+        $invoiceArray = [];
+        $purchaseList = [];
+        $purchaseCount = [];
         foreach ($dataArray as $dataArr) {
-            $brandName = rtrim(preg_replace("/[^\W\d]*\d\w*/", " ", $dataArr['brand']));
+            // $brandName = rtrim(preg_replace("/[^\W\d]*\d\w*/", " ", $dataArr['brand']));
+            $brandName = $dataArr['brand'];
             $btl = intval($dataArr['total']);
             $data['invoice_no'] = $dataArr['invoiceNo'];
-            $data['invoice_date'] = date('Y-m-d', strtotime($dataArr['date']));
+            $data['invoice_date'] = date('Y-m-d', strtotime($dataArr['date'] . ' +1 day'));
             $supplier = Supplier::select('id')->where([['name', 'like', '%' . $dataArr['supplier'] . '%'], 'company_id' => $company_id])->get();
             $data['vendor_id'] = $supplier[0]['id'];
             $data['company_id'] = $company_id;
@@ -1748,7 +1955,18 @@ class Api extends Controller
                 $skipped++;
                 continue;
             }
+            $data['batch_no'] =  !empty($dataArr['batch_no']) ? $dataArr['batch_no'] : null;
             $data['created_by'] = $request->user()->id;
+            $data['total_amount'] = !empty($dataArr['total_amount']) ? $dataArr['total_amount'] : 0;
+            $data['isInvoice'] = $data['total_amount'] > 0 ? 1 : 0;
+            if (in_array($dataArr['invoiceNo'], $invoiceArray)) {
+                $purchaseCount[$dataArr['invoiceNo']]['count'] = $purchaseCount[$dataArr['invoiceNo']]['count'] + 1;
+            } else {
+                $purchaseCount[$dataArr['invoiceNo']]['count'] = 1;
+                array_push($purchaseList, $data);
+                array_push($invoiceArray, $dataArr['invoiceNo']);
+            }
+
             $data['category_id'] = $brandSize[0]['category_id'];
             $data['brand_id'] = $brandSize[0]['id'];
             $data['no_btl'] = $btl; //number of btl
@@ -1772,10 +1990,22 @@ class Api extends Controller
                         'brand_id' => $brandSize[0]['id'],
                         'qty' => $MlSize,
                     ));
-                    $stock->save();
+                    if ($stock->save()) {
+                        $opening['company_id'] = $company_id;
+                        $opening['brand_id'] = $brandSize[0]['id'];
+                        $opening['qty'] = $MlSize;
+                        $opening['date'] = date('Y-m-d', strtotime($dataArr['date'] . ' +1 day'));
+                        $saveOpening = new DailyOpening($opening);
+                        $saveOpening->save();
+                    }
                 }
                 $isSaved = true;
             }
+        }
+        foreach ($purchaseList as $key => $purchaseData) {
+            $purchaseData['total_item'] = $purchaseCount[$purchaseData['invoice_no']]['count'];
+            $save2 = new PurchaseList($purchaseData);
+            $save2->save();
         }
         if ($isSaved) {
             $data_log = [
@@ -1799,13 +2029,13 @@ class Api extends Controller
     }
     public function bulkSalesImport(Request $request)
     {
-        error_reporting(0);
         $dataArray = $request->data;
         $counter = 0;
         $skipped = 0;
         $data['company_id'] = $dataArray[0]['company_id'];
         foreach ($dataArray as $key => $dataAr) {
             $name = $dataAr['name'];
+
             $success = false;
             $isCocktail = false;
             $brands = Brand::select('id as brand_id', 'category_id')->where(['name' => $name, 'status' => 1])->get();
@@ -1822,11 +2052,15 @@ class Api extends Controller
                 $brand_id = $brand['brand_id'];
                 $data['category_id'] = $brand['category_id'];
                 $data['brand_id'] = $brand['brand_id'];
+                $date['sale_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
                 $peg_size = Brand::select('peg_size', 'btl_size')->where(['id' => $brand_id])->get();
                 $stock = Stock::select('id', 'btl_selling_price', 'peg_selling_price')->where(['company_id' => $data['company_id'],  'brand_id' => $brand_id])->get();
                 if (count($stock) > 0) {
                     $data['created_by'] = $request->user()->id;
-                    $data['description'] = $brand_id . ' brand sales entry has been done from bulk import by ' . $request->user()->id;
+                    $data['description'] = ' brand id ' . $brand_id . '  sales entry has been done from bulk import by ' . $request->user()->id;
+                    $MlSize = 0;
+                    $MlSize1 = 0;
+                    $MlSize2 = 0;
                     if ($isCocktail) {
                         $qty = ($brand['serving_size'] * $dataAr['sale']) / $peg_size[0]['peg_size'];
                         $data['sale_price'] = ($qty * $stock[0]['peg_selling_price']);
@@ -1882,12 +2116,9 @@ class Api extends Controller
                         $Sales = new Sales($data);
                         if ($Sales->save()) {
                             if ($dataAr['complimentary'] > 0) {
-                                $data['sale'] = $dataAr['complimentary'];
                                 // calculate qty for complimentary
-                                $qty = ($brand['serving_size'] * $dataAr['sale']) / $peg_size[0]['peg_size'];
-
-                                $data['sale_price'] = ($qty * $stock[0]['peg_selling_price']);
-                                $MlSize1 = ($brand['serving_size'] * $dataAr['sale']);
+                                $data['sale_price'] = ($dataAr['complimentary'] * $stock[0]['btl_selling_price']);
+                                $MlSize1 = ($peg_size[0]['btl_size'] * $dataAr['sale']);
                                 $data['qty'] = $MlSize1;
                                 $data['sales_type'] = 2;
                                 $result = getBtlPeg($brand_id, $MlSize1);
@@ -1897,11 +2128,9 @@ class Api extends Controller
                                 $Sales->save();
                             }
                             if ($dataAr['combo'] > 0) {
-                                $data['sale'] = $dataAr['combo'];
                                 // calculate qty for combo
-                                $qty = ($brand['serving_size'] * $dataAr['sale']) / $peg_size[0]['peg_size'];
-                                $data['sale_price'] = ($qty * $stock[0]['peg_selling_price']);
-                                $MlSize2 = ($brand['serving_size'] * $dataAr['sale']);
+                                $data['sale_price'] = ($dataAr['combo'] * $stock[0]['btl_selling_price']);
+                                $MlSize2 = ($peg_size[0]['btl_size'] * $dataAr['sale']);
                                 $data['qty'] = $MlSize2;
                                 $data['sales_type'] = 3;
                                 $result = getBtlPeg($brand_id, $MlSize2);
@@ -2012,20 +2241,10 @@ class Api extends Controller
             ]);
         }
     }
-    public function getPurchase(Request $request)
+    public function ValidateTp(Request $request)
     {
-        if ($request->isInvoice == 0)
-            $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.mrp' => null, 'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC')->get();
-        else
-            $data = Purchase::select('brands.name', 'no_btl', 'purchases.invoice_no', 'purchases.created_at', 'purchases.id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, ['purchases.mrp', '>=', 0], 'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC')->get();
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+        $data = Purchase::where(['invoice_no' => $request->invoice_no, 'company_id' => $request->company_id, 'status' => 1])->get()->count();
+        return response()->json($data);
     }
     public function recipeDetails(Request $request)
     {
@@ -2176,7 +2395,7 @@ class Api extends Controller
     }
     public function fetchPurchaseData(Request $request)
     {
-        $data = Purchase::select('brands.name', 'purchases.*')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.id' => $request->id])->orderBy('id', 'DESC')->get();
+        $data = Purchase::select('brands.name', 'purchases.*')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.invoice_no' => $request->id])->orderBy('id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -2188,7 +2407,7 @@ class Api extends Controller
     }
     public function dashboard(Request $request)
     {
-        $data = Sales::select('sale_price', DB::raw('date(created_at) as date'))->where(['company_id' => $request->company_id, 'status' => 1])->whereRaw('created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)')->groupBy('created_at')->orderBy('created_at', 'ASC')->get();
+        $data = Sales::select(DB::raw('sum(sale_price) as sale_price'), DB::raw('date(created_at) as date'))->where(['company_id' => $request->company_id, 'status' => 1])->whereRaw('created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)')->groupBy('created_at')->orderBy('created_at', 'ASC')->get();
         $sale = [];
         $date = [];
         foreach ($data as $row) {
@@ -2208,12 +2427,10 @@ class Api extends Controller
     }
     public function BarVarianceReport(Request $request)
     {
-
-
-
         // $Category = Category::where(['company_id' => $company_id])->get();
         $Category = Category::select('id', 'name')->get();
         $data = [];
+        $json = [];
         foreach ($Category as $key => $Category_data) {
 
             $brands_data = DB::table("brands")
@@ -2226,23 +2443,20 @@ class Api extends Controller
                 $brand_size = $brandList->btl_size;
                 $data_cat = $Category_data['name'] . "-" . $brand_size;
 
-                $data[$key][$key2]['cat_name'] = $data_cat;
-
-
                 $brandName_Data = Brand::where(['category_id' => $brandList->category_id, 'btl_size' => $brand_size])->get();
-                $total = '0';
+                $total = 0;
                 $arr = [];
                 foreach ($brandName_Data as $key1 => $brandListName) {
-
+                    $arr['category'] = $data_cat;
                     //$data[$key][$key2]['brand'][] = $brandListName['name'];
                     $arr['name'] = $brandListName['name'];
 
-                    $data_daily_opening = DB::table("daily_opening")
+                    $data_daily_opening = DB::table("daily_openings")
                         ->select('qty')
                         ->where('company_id', '=', $request->company_id)
-                        ->where('date', '=', $request->from_date)
+                        ->where('date', '=', date('Y-m-d', strtotime($request->from_date . '+1 day')))
                         ->where('brand_id', '=', $brandListName['id'])
-                        ->get();
+                        ->get()->first();
 
 
                     $balance = DB::table('purchases')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id])->whereBetween('created_at', [$request->from_date, date('Y-m-d')])->sum('qty');
@@ -2257,7 +2471,7 @@ class Api extends Controller
 
 
 
-                    $qty = !empty($data_daily_opening[0]->qty) ? $data_daily_opening[0]->qty : '0';
+                    $qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
 
 
 
@@ -2288,6 +2502,11 @@ class Api extends Controller
                     //$data[$key][$key2]['brand'][]['sales_ml'] = $sales;
 
                     $closing = ($total - $sales);
+                    $PhyQty = Stock::where(['company_id' => $request->company_id, 'brand_id' => $brandListName['id']])->get()->first();
+                    $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
+
+                    $variance = $PhyClosing - $closing;
+
                     $brand_size = $brandListName['btl_size'];
 
 
@@ -2311,7 +2530,7 @@ class Api extends Controller
                     $peg_receipt  = intval($balance / $brandListName['peg_size']);
 
                     //$data[$key][$key2]['brand'][]['receipt'] = $btl_receipt.".".$peg_receipt;
-                    $arr['recipt'] = $btl_receipt . "." . $peg_receipt;
+                    $arr['receipt'] = $btl_receipt . "." . $peg_receipt;
 
                     //transaction
                     $btl_transaction  = 0;
@@ -2348,25 +2567,41 @@ class Api extends Controller
                     $arr['sales'] = $btl_sales . "." . $peg_sales;
                     //$data[$key][$key2]['brand'][]['sales'] = $btl_sales.".".$peg_sales;
 
-                    //closing
-                    //echo "<pre>";print_r($closing);
-
+                    //  system qty closing
                     $btl_closing  = 0;
                     while ($closing >= $brand_size) {
                         $closing = $closing - $brand_size;
                         $btl_closing++;
                     }
                     $peg_closing  = intval($closing / $brandListName['peg_size']);
+                    // physical qty closing
+                    $p_btl_closing  = 0;
+                    while ($PhyClosing >= $brand_size) {
+                        $PhyClosing = $PhyClosing - $brand_size;
+                        $p_btl_closing++;
+                    }
+                    $p_peg_closing  = intval($PhyClosing / $brandListName['peg_size']);
+                    // variance 
+                    $v_btl_closing  = 0;
+                    while ($variance >= $brand_size) {
+                        $variance = $variance - $brand_size;
+                        $v_btl_closing++;
+                    }
+                    $v_peg_closing  = intval($variance / $brandListName['peg_size']);
 
                     $arr['closing'] = $btl_closing . "." . $peg_closing;
+                    $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
+                    $arr['variance'] = $v_btl_closing . "." . $v_peg_closing;
                     //$data[$key][$key2]['brand'][]['closing'] = $btl_closing.".".$peg_closing;
                     //echo "<pre>";print_r($arr);
                     //$data[$key][$key2]['brand'][]['final_data'] = $arr;
-                    $data[$key][$key2]['brand'][] = $arr;
+                    // $data[$key2]['cat_name'] = $data_cat;
+                    // $data[$key2]['brand'][] = $arr;
+                    array_push($json, $arr);
                 }
             }
         }
-        echo json_encode($data);
+        echo json_encode($json);
     }
 
     public function AddTransaction(Request $request)

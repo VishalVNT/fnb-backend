@@ -11,6 +11,7 @@ class DailyOpening extends Model
     protected $fillable = [
         'company_id',
         'brand_id',
-        'qty'
+        'qty',
+        'date'
     ];
 }
