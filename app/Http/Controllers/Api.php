@@ -2504,11 +2504,12 @@ class Api extends Controller
                     $closing = ($total - $sales);
                     $PhyQty = Stock::where(['company_id' => $request->company_id, 'brand_id' => $brandListName['id']])->get()->first();
                     $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
-
                     $variance = $PhyClosing - $closing;
-
                     $brand_size = $brandListName['btl_size'];
-
+                    if ($variance < 0) {
+                        $isMinus = true;
+                        $variance = abs($variance);
+                    }
 
                     $btl_opening = 0;
                     while ($qty >= $brand_size) {
@@ -2591,7 +2592,7 @@ class Api extends Controller
 
                     $arr['closing'] = $btl_closing . "." . $peg_closing;
                     $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
-                    $arr['variance'] = $v_btl_closing . "." . $v_peg_closing;
+                    $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
                     //$data[$key][$key2]['brand'][]['closing'] = $btl_closing.".".$peg_closing;
                     //echo "<pre>";print_r($arr);
                     //$data[$key][$key2]['brand'][]['final_data'] = $arr;
