@@ -1891,6 +1891,9 @@ class Api extends Controller
         $company_id = $dataArray[0]['company_id'];
         // $branch_id = $dataArray[0]['branch_id'];
         $isSaved = false;
+        $failed_data = [];
+        $skipped = 0;
+        $counter = 0;
         foreach ($dataArray as $dataArr) {
             $brandName = $dataArr['brand'];
             $total = explode('.', $dataArr['total']);
@@ -1932,12 +1935,19 @@ class Api extends Controller
                         $opening['date'] = date('Y-m-d', strtotime($dataArr['date'] . ' +1 day'));
                         $saveOpening = new DailyOpening($opening);
                         $saveOpening->save();
+                    } else {
+                        array_push($failed_data, $dataArr['brand']);
+                        $skipped++;
                     }
                 }
-                $isSaved = true;
+                $counter++;
+            } else {
+                array_push($failed_data, $dataArr['brand']);
+                $skipped++;
             }
         }
-        if ($isSaved) {
+
+        if ($counter > 0 || $skipped > 0) {
             $data_log = [
                 'user_type' => $request->user()->type,
                 'user_id' => $request->user()->id,
@@ -1946,9 +1956,11 @@ class Api extends Controller
                 'platform' => 'web'
             ];
             SaveLog($data_log);
+
             return response()->json([
-                'message' => 'Stock Updated',
-                'type' => 'success'
+                'message' => $counter . ' Stock Added, ' . $skipped . 'Entries failed',
+                'type' => 'success',
+                'brand' => $failed_data
             ], 201);
         } else {
             return response()->json([
@@ -2038,7 +2050,7 @@ class Api extends Controller
             $save2 = new PurchaseList($purchaseData);
             $save2->save();
         }
-        if ($isSaved) {
+        if ($counter > 0 || $skipped > 0) {
             $data_log = [
                 'user_type' => $request->user()->type,
                 'user_id' => $request->user()->id,
@@ -2053,6 +2065,7 @@ class Api extends Controller
                 'brand' => $failedData
             ], 201);
         }
+
         return response()->json([
             'message' => '0 entries added, Operation failed',
             'type' => 'failed'
@@ -2067,7 +2080,7 @@ class Api extends Controller
         $failed_data = [];
         foreach ($dataArray as $key => $dataAr) {
             $name = $dataAr['name'];
-           
+
             $success = false;
             $isCocktail = false;
             $brands = Brand::select('id as brand_id', 'category_id')->where(['name' => $name, 'status' => 1])->get();
@@ -2198,8 +2211,6 @@ class Api extends Controller
                                 $Sales = new Sales($data);
                                 $Sales->save();
                             }
-                            
-                            
                         }
                     }
                     $total_qty_sold = $MlSize + $MlSize1 + $MlSize2;
@@ -2243,7 +2254,16 @@ class Api extends Controller
     public function bulkImportRecipes(Request $request)
     {
         $dataArray = ($request->data);
+        $skipped = 0;
+        $failed_data = [];
+        $counter = 0;
         foreach ($dataArray as $key => $dataAr) {
+            $found = Recipe::where(['name' => $dataAr['name']])->get()->count();
+            if ($found > 0) {
+                array_push($failed_data, $dataAr['name']);
+                $skipped++;
+                continue;
+            }
             $name = $dataAr['name'];
             $serving_size = !empty($dataAr['serving_size']) ? empty($dataAr['serving_size']) : 0;
             $isSaved = false;
@@ -2261,36 +2281,32 @@ class Api extends Controller
             $data['recipe_code'] = $recipe_code;
             $data['created_by'] = $request->user()->id;
             $Recipe = new Recipe($data);
-            if ($Recipe->save())
-                $isSaved = true;
+            if ($Recipe->save()) {
+                $counter++;
+            } else {
+                array_push($failed_data, $dataAr['name']);
+                $skipped++;
+            }
         }
-        if ($isSaved) {
+        if ($counter > 0 || $skipped > 0) {
             $data_log = [
                 'user_type' => $request->user()->type,
                 'user_id' => $request->user()->id,
                 'ip' => $request->ip(),
-                'log' =>  $request->name . ' Recipe created',
+                'log' =>  'bulk Recipe created',
                 'platform' => 'web'
             ];
-            $log_save = SaveLog($data_log);
-            if (($log_save)) {
-                return response()->json([
-                    'message' => 'Recipe Added',
-                    'type' => 'success'
-                ], 201);
-            } else {
-                return response()->json([
-                    'message' => 'Oops! Operation failed',
-                    'type' => 'failed'
-                ], 401);
-            }
-        } else {
-
+            SaveLog($data_log);
             return response()->json([
-                'message' => 'Oops! Operation failed',
-                'type' => 'failed'
-            ], 401);
+                'message' => $counter . ' Recipe Added, ' . $skipped . 'Entries failed',
+                'type' => 'success',
+                'brand' => $failed_data
+            ], 201);
         }
+        return response()->json([
+            'message' => 'Oops! Operation failed',
+            'type' => 'failed'
+        ], 401);
     }
 
     //getSales
