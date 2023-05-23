@@ -1929,8 +1929,6 @@ class Api extends Controller
                         $opening['company_id'] = $company_id;
                         $opening['brand_id'] = $brandSize[0]['id'];
                         $opening['qty'] = $MlSize;
-
-
                         $opening['date'] = date('Y-m-d', strtotime($dataArr['date'] . ' +1 day'));
                         $saveOpening = new DailyOpening($opening);
                         $saveOpening->save();
@@ -2066,15 +2064,17 @@ class Api extends Controller
         $counter = 0;
         $skipped = 0;
         $data['company_id'] = $dataArray[0]['company_id'];
+        $failed_data = [];
         foreach ($dataArray as $key => $dataAr) {
             $name = $dataAr['name'];
-
+           
             $success = false;
             $isCocktail = false;
             $brands = Brand::select('id as brand_id', 'category_id')->where(['name' => $name, 'status' => 1])->get();
             if (count($brands) < 1) {
                 $brands = Recipe::select('recipe_code', 'brand_id', 'serving_size', 'category_id', 'is_cocktail')->where(['name' => $name, 'company_id' => $data['company_id'], 'status' => 1])->get();
                 if (count($brands) < 1) {
+                    array_push($failed_data, $dataAr['name']);
                     $skipped++;
                     continue; // if no matching brand or recipe found then skip to next entry
                 } else
@@ -2107,8 +2107,8 @@ class Api extends Controller
                         $Sales = new Sales($data);
                         if ($Sales->save()) {
                             $success = true;
-                            if ($dataAr['complimentary'] > 0) {
-                                $data['sale'] = $dataAr['complimentary'];
+                            if ($dataAr['nc'] > 0) {
+                                $data['sale'] = $dataAr['nc'];
                                 // calculate qty for complimentary
                                 $qty = ($brand['serving_size'] * $data['sale']) / $peg_size[0]['peg_size'];
 
@@ -2122,14 +2122,28 @@ class Api extends Controller
                                 $Sales = new Sales($data);
                                 $Sales->save();
                             }
-                            if ($dataAr['combo'] > 0) {
-                                $data['sale'] = $dataAr['combo'];
+                            if ($dataAr['banquet'] > 0) {
+                                $data['sale'] = $dataAr['banquet'];
                                 // calculate qty for combo
                                 $qty = ($brand['serving_size'] * $data['sale']) / $peg_size[0]['peg_size'];
                                 $data['sale_price'] = ($qty * $stock[0]['peg_selling_price']);
                                 $MlSize2 = ($brand['serving_size'] * $data['sale']);
                                 $data['qty'] = $MlSize2;
                                 $data['sales_type'] = 3;
+                                $result = getBtlPeg($brand_id, $MlSize2);
+                                $data['no_btl'] = $result['btl'];
+                                $data['no_peg'] = $result['peg'];
+                                $Sales = new Sales($data);
+                                $Sales->save();
+                            }
+                            if ($dataAr['spoilage'] > 0) {
+                                $data['sale'] = $dataAr['spoilage'];
+                                // calculate qty for combo
+                                $qty = ($brand['serving_size'] * $data['sale']) / $peg_size[0]['peg_size'];
+                                $data['sale_price'] = ($qty * $stock[0]['peg_selling_price']);
+                                $MlSize2 = ($brand['serving_size'] * $data['sale']);
+                                $data['qty'] = $MlSize2;
+                                $data['sales_type'] = 4;
                                 $result = getBtlPeg($brand_id, $MlSize2);
                                 $data['no_btl'] = $result['btl'];
                                 $data['no_peg'] = $result['peg'];
@@ -2148,10 +2162,10 @@ class Api extends Controller
                         $data['no_peg'] = $result['peg'];
                         $Sales = new Sales($data);
                         if ($Sales->save()) {
-                            if ($dataAr['complimentary'] > 0) {
+                            if ($dataAr['nc'] > 0) {
                                 // calculate qty for complimentary
-                                $data['sale_price'] = ($dataAr['complimentary'] * $stock[0]['btl_selling_price']);
-                                $MlSize1 = ($peg_size[0]['btl_size'] * $dataAr['sale']);
+                                $data['sale_price'] = ($dataAr['nc'] * $stock[0]['btl_selling_price']);
+                                $MlSize1 = ($peg_size[0]['btl_size'] * $dataAr['nc']);
                                 $data['qty'] = $MlSize1;
                                 $data['sales_type'] = 2;
                                 $result = getBtlPeg($brand_id, $MlSize1);
@@ -2160,10 +2174,10 @@ class Api extends Controller
                                 $Sales = new Sales($data);
                                 $Sales->save();
                             }
-                            if ($dataAr['combo'] > 0) {
+                            if ($dataAr['banquet'] > 0) {
                                 // calculate qty for combo
-                                $data['sale_price'] = ($dataAr['combo'] * $stock[0]['btl_selling_price']);
-                                $MlSize2 = ($peg_size[0]['btl_size'] * $dataAr['sale']);
+                                $data['sale_price'] = ($dataAr['banquet'] * $stock[0]['btl_selling_price']);
+                                $MlSize2 = ($peg_size[0]['btl_size'] * $dataAr['banquet']);
                                 $data['qty'] = $MlSize2;
                                 $data['sales_type'] = 3;
                                 $result = getBtlPeg($brand_id, $MlSize2);
@@ -2172,6 +2186,20 @@ class Api extends Controller
                                 $Sales = new Sales($data);
                                 $Sales->save();
                             }
+                            if ($dataAr['spoilage'] > 0) {
+                                // calculate qty for combo
+                                $data['sale_price'] = ($dataAr['spoilage'] * $stock[0]['btl_selling_price']);
+                                $MlSize2 = ($peg_size[0]['btl_size'] * $dataAr['spoilage']);
+                                $data['qty'] = $MlSize2;
+                                $data['sales_type'] = 4;
+                                $result = getBtlPeg($brand_id, $MlSize2);
+                                $data['no_btl'] = $result['btl'];
+                                $data['no_peg'] = $result['peg'];
+                                $Sales = new Sales($data);
+                                $Sales->save();
+                            }
+                            
+                            
                         }
                     }
                     $total_qty_sold = $MlSize + $MlSize1 + $MlSize2;
@@ -2191,9 +2219,11 @@ class Api extends Controller
                         SaveLog($data_log);
                         $counter++; // counter for sales entry
                     } else {
+                        array_push($failed_data, $dataAr['name']);
                         $skipped++; // counter for error in entry
                     }
                 } else {
+                    array_push($failed_data, $dataAr['name']);
                     $skipped++;
                 }
             }
@@ -2201,7 +2231,8 @@ class Api extends Controller
         if ($counter > 0 || $skipped > 0) {
             return response()->json([
                 'message' => $counter . ' Sales Added, ' . $skipped . 'Entries failed',
-                'type' => 'success'
+                'type' => 'success',
+                'brand' => $failed_data
             ], 201);
         }
         return response()->json([
