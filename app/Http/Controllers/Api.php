@@ -2543,13 +2543,23 @@ class Api extends Controller
                 $spoilageSum = 0;
                 $ncSalesSum = 0;
                 $cocktailSalesSum = 0;
-                $varSum = 0;
 
-
+                $arr['name'] = $data_cat;
+                $arr['open'] = '';
+                $arr['receipt'] = '';
+                $arr['total'] = '';
+                $arr['sales'] = '';
+                $arr['nc_sales'] = '';
+                $arr['cocktail_sales'] = '';
+                $arr['banquet_sales'] = '';
+                $arr['spoilage_sales'] = '';
+                $arr['closing'] = '';
+                $arr['physical'] = '';
+                $arr['variance'] = '';
+                array_push($json, $arr);
                 foreach ($brandName_Data as $key1 => $brandListName) {
                     $isMinus = false;
 
-                    $arr['category'] = $data_cat;
                     $arr['name'] = $brandListName['name'];
 
 
@@ -2593,8 +2603,6 @@ class Api extends Controller
                     $physicalSum = $physicalSum + $PhyClosing;
 
                     $variance = $PhyClosing - $closing;
-                    $varSum = $varSum + $variance;
-
 
                     $brand_size = $brandListName['btl_size'];
                     if ($variance < 0) {
@@ -2703,6 +2711,7 @@ class Api extends Controller
 
 
                     $arr['closing'] = $btl_closing . "." . $peg_closing;
+
                     $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
                     $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
 
@@ -2711,7 +2720,7 @@ class Api extends Controller
                 }
 
                 if (count($brandName_Data) > 0) {
-                    $arr['category'] = $Category_data['name'] . '-' . $brand_size;
+                    
                     $peg_size = $brandList->peg_size;
                     //open all
                     $open_btl_all = 0;
@@ -2805,14 +2814,6 @@ class Api extends Controller
                     $peg_banquet_all  = $banquetSum / $peg_size;
                     $banquet_all = $banquet_btl_all . "." . $peg_banquet_all;
 
-                    //varSum
-                    $var_btl_all = 0;
-                    while ($varSum >= $brand_size) {
-                        $varSum = $varSum - $brand_size;
-                        $var_btl_all++;
-                    }
-                    $peg_var_all  = $varSum / $peg_size;
-                    $var_all = $var_btl_all . "." . $peg_var_all;
 
                     $arr['name'] = 'SUBTOTAL';
                     $arr['open'] = $open_all;
@@ -2825,7 +2826,7 @@ class Api extends Controller
                     $arr['spoilage_sales'] = $spoilage_all;
                     $arr['closing'] = $closing_all;
                     $arr['physical'] = $physical_all;
-                    $arr['variance'] = $var_all;
+                    $arr['variance'] = $physical_all - $closing_all;
                     array_push($json, $arr);
                 }
             }
