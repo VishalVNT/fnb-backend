@@ -2543,7 +2543,7 @@ class Api extends Controller
                 $spoilageSum = 0;
                 $ncSalesSum = 0;
                 $cocktailSalesSum = 0;
-
+                $selling_variance = 0;
                 $arr['name'] = $data_cat;
                 $arr['open'] = '';
                 $arr['receipt'] = '';
@@ -2556,6 +2556,8 @@ class Api extends Controller
                 $arr['closing'] = '';
                 $arr['physical'] = '';
                 $arr['variance'] = '';
+                $arr['selling_price'] = '';
+                $arr['selling_variance'] = '';
                 array_push($json, $arr);
                 foreach ($brandName_Data as $key1 => $brandListName) {
                     $isMinus = false;
@@ -2598,6 +2600,7 @@ class Api extends Controller
                     $closingSum = $closingSum + $closing;
 
                     $PhyQty = Stock::where(['company_id' => $request->company_id, 'brand_id' => $brandListName['id']])->get()->first();
+
                     $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
 
                     $physicalSum = $physicalSum + $PhyClosing;
@@ -2714,13 +2717,16 @@ class Api extends Controller
 
                     $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
                     $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
-
-
+                    $btl_selling_price = !empty($PhyQty['btl_selling_price']) ? $PhyQty['btl_selling_price'] : 0;
+                    $peg_selling_price = !empty($PhyQty['peg_selling_price']) ? $PhyQty['peg_selling_price'] : 0;
+                    $arr['selling_price'] = $btl_selling_price;
+                    $arr['selling_variance'] = $v_btl_closing * $btl_selling_price + $v_peg_closing * $peg_selling_price;
+                    $selling_variance = $selling_variance + $arr['selling_variance'];
                     array_push($json, $arr);
                 }
 
                 if (count($brandName_Data) > 0) {
-                    
+
                     $peg_size = $brandList->peg_size;
                     //open all
                     $open_btl_all = 0;
@@ -2827,6 +2833,8 @@ class Api extends Controller
                     $arr['closing'] = $closing_all;
                     $arr['physical'] = $physical_all;
                     $arr['variance'] = $physical_all - $closing_all;
+                    $arr['selling_price'] = '';
+                    $arr['selling_variance'] = $selling_variance;
                     array_push($json, $arr);
                 }
             }
