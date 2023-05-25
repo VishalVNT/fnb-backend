@@ -2509,11 +2509,9 @@ class Api extends Controller
     public function BarVarianceReport(Request $request)
     {
         $Category = Category::select('id', 'name')->get();
-        $data = [];
         $json = [];
-        $c_id = '';
 
-        foreach ($Category as $key => $Category_data) {
+        foreach ($Category as $Category_data) {
             // echo "<pre>";print_r($Category_data);
 
             $brands_data = DB::table("brands")
@@ -2521,7 +2519,7 @@ class Api extends Controller
                 ->where('category_id', '=', $Category_data['id'])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))
                 ->get();
 
-            foreach ($brands_data as $key2 => $brandList) {
+            foreach ($brands_data as  $brandList) {
 
                 $brand_size = $brandList->btl_size;
                 //$brand_id = $brandList->id;
@@ -2529,9 +2527,7 @@ class Api extends Controller
 
                 $brandName_Data = Brand::where(['category_id' => $brandList->category_id, 'btl_size' => $brand_size])->get();
                 $total = 0;
-                $arr = [];
                 $brand_open_btl = 0;
-                $brand_open_peg = 0;
 
                 $openSum = 0;
                 $receiptSum = 0;
@@ -2544,22 +2540,26 @@ class Api extends Controller
                 $ncSalesSum = 0;
                 $cocktailSalesSum = 0;
                 $selling_variance = 0;
-                $arr['name'] = $data_cat;
-                $arr['open'] = '';
-                $arr['receipt'] = '';
-                $arr['total'] = '';
-                $arr['sales'] = '';
-                $arr['nc_sales'] = '';
-                $arr['cocktail_sales'] = '';
-                $arr['banquet_sales'] = '';
-                $arr['spoilage_sales'] = '';
-                $arr['closing'] = '';
-                $arr['physical'] = '';
-                $arr['variance'] = '';
-                $arr['selling_price'] = '';
-                $arr['selling_variance'] = '';
-                array_push($json, $arr);
-                foreach ($brandName_Data as $key1 => $brandListName) {
+                $cost_variance = 0;
+
+                $arrCat = [
+                    'name' => $data_cat,
+                    'open' => '',
+                    'receipt' => '',
+                    'total' => '',
+                    'sales' => '',
+                    'nc_sales' => '',
+                    'cocktail_sales' => '',
+                    'banquet_sales' => '',
+                    'spoilage_sales' => '',
+                    'closing' => '',
+                    'physical' => '',
+                    'variance' => '',
+                    'selling_variance' => '',
+                    'cost_variance' => ''
+                ];
+
+                foreach ($brandName_Data as  $brandListName) {
                     $isMinus = false;
 
                     $arr['name'] = $brandListName['name'];
@@ -2719,10 +2719,28 @@ class Api extends Controller
                     $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
                     $btl_selling_price = !empty($PhyQty['btl_selling_price']) ? $PhyQty['btl_selling_price'] : 0;
                     $peg_selling_price = !empty($PhyQty['peg_selling_price']) ? $PhyQty['peg_selling_price'] : 0;
-                    $arr['selling_price'] = $btl_selling_price;
+
+
+                    $cost_btl_price = !empty($PhyQty['cost_price']) ? $PhyQty['cost_price'] : 0;
+                    $cost_peg_price = $cost_btl_price / ($brandListName['btl_size'] / $brandListName['peg_size']); // calculate peg price from btl cost
+
+                    // $arr['selling_price'] = $btl_selling_price;
+
+                    // selling price variance
+
                     $arr['selling_variance'] = $v_btl_closing * $btl_selling_price + $v_peg_closing * $peg_selling_price;
                     $selling_variance = $selling_variance + $arr['selling_variance'];
-                    array_push($json, $arr);
+
+                    // cost price variance
+                    $arr['cost_variance'] = $v_btl_closing * $cost_btl_price + $v_peg_closing * $cost_peg_price;
+                    $cost_variance = $cost_variance + $arr['cost_variance'];
+
+                    if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0') {
+                        if (!in_array($arrCat, $json)) {
+                            array_push($json, $arrCat);
+                        }
+                        array_push($json, $arr);
+                    }
                 }
 
                 if (count($brandName_Data) > 0) {
@@ -2821,21 +2839,25 @@ class Api extends Controller
                     $banquet_all = $banquet_btl_all . "." . $peg_banquet_all;
 
 
-                    $arr['name'] = 'SUBTOTAL';
-                    $arr['open'] = $open_all;
-                    $arr['receipt'] = $receipt_all;
-                    $arr['total'] = $total_all;
-                    $arr['sales'] = $sales_all;
-                    $arr['nc_sales'] = $ncSales_all;
-                    $arr['cocktail_sales'] = $cocktail_all;
-                    $arr['banquet_sales'] = $banquet_all;
-                    $arr['spoilage_sales'] = $spoilage_all;
-                    $arr['closing'] = $closing_all;
-                    $arr['physical'] = $physical_all;
-                    $arr['variance'] = $physical_all - $closing_all;
-                    $arr['selling_price'] = '';
-                    $arr['selling_variance'] = $selling_variance;
-                    array_push($json, $arr);
+                    $arr = [
+                        'name' => 'SUBTOTAL',
+                        'open' => $open_all,
+                        'receipt' => $receipt_all,
+                        'total' => $total_all,
+                        'sales' => $sales_all,
+                        'nc_sales' => $ncSales_all,
+                        'cocktail_sales' => $cocktail_all,
+                        'banquet_sales' => $banquet_all,
+                        'spoilage_sales' => $spoilage_all,
+                        'closing' => $closing_all,
+                        'physical' => $physical_all,
+                        'variance' => $physical_all - $closing_all,
+                        //'selling_price' => '', // Add your desired value for 'selling_price'
+                        'selling_variance' => $selling_variance,
+                        'cost_variance' => $cost_variance
+                    ];
+                    if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0')
+                        array_push($json, $arr);
                 }
             }
         }
