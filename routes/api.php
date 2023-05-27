@@ -100,6 +100,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/manage_stock', [Api::class, 'manage_stock']);
     Route::post('/getStockApi', [Api::class, 'getStockApi']);
     Route::post('/BarVarianceReport', [Api::class, 'BarVarianceReport']);
+    Route::post('/BarVarianceReportMl', [Api::class, 'BarVarianceReportMl']);
     Route::post('/recipeFetchApi', [Api::class, 'recipeFetchApi']);
     Route::post('/getMenuOptions', [Api::class, 'getMenuOptions']);
     Route::post('/recipeDetails', [Api::class, 'recipeDetails']);

@@ -1324,7 +1324,7 @@ class Api extends Controller
         $data['court_fees'] = $request->court_fees;
         $data['tcs'] = $request->tcs;
         $data['total_amount'] = $request->total_amount;
-        $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date));
+        $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date . ' +1 day'));
         $data['created_by'] = $request->user()->id;
         $data['batch_no'] = $request->batch_no;
         $data['discount'] = $request->discount;
@@ -1420,7 +1420,7 @@ class Api extends Controller
         $data['tcs'] = $request->tcs;
         $data['total_amount'] = $request->total_amount;
         $data['invoice_no'] = $request->invoice_no;
-        $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date));
+        $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date . ' +1 day'));
         $data['created_by'] = $request->user()->id;
         $data['batch_no'] = $request->batch_no;
         $data['vendor_id'] = $request->vendor_id;
@@ -1577,7 +1577,7 @@ class Api extends Controller
     }
     public function getAllBrandOption(Request $request)
     {
-        $brands = Brand::select('name as value', 'id', 'category_id', DB::raw('CONCAT(id," - ",name) as label'), DB::raw('0 as recipe'))->where(['status' => 1])->get();
+        $brands = Brand::select('name as value', 'id', 'category_id', DB::raw('CONCAT(id," - ",name," - ",btl_size) as label'), DB::raw('0 as recipe'))->where(['status' => 1])->get();
         if ($brands) {
             return response()->json($brands);
         } else {
@@ -1590,7 +1590,7 @@ class Api extends Controller
     public function getAllBrandSales(Request $request)
     {
         $dataArray = array();
-        $brands = Brand::select('name as value', DB::raw('CONCAT(code," - ",name) as label'), 'brands.id', 'brands.category_id', DB::raw('0 as recipe'))->join('stocks', 'stocks.brand_id', '=', 'brands.id')->where(['brands.status' => 1, 'stocks.company_id' => $request->company_id])->get();
+        $brands = Brand::select('name as value', DB::raw('CONCAT(brands.id," - ",name," - ",btl_size) as label'), 'brands.id', 'brands.category_id', DB::raw('0 as recipe'))->join('stocks', 'stocks.brand_id', '=', 'brands.id')->where(['brands.status' => 1, 'stocks.company_id' => $request->company_id])->get();
         if ($brands) {
             foreach ($brands as $brand) {
                 array_push($dataArray, $brand);
@@ -1958,7 +1958,7 @@ class Api extends Controller
             SaveLog($data_log);
 
             return response()->json([
-                'message' => $counter . ' Stock Added, ' . $skipped . 'Entries failed',
+                'message' => $counter . ' Stock Added, ' . $skipped . ' Entries failed',
                 'type' => 'success',
                 'brand' => $failed_data
             ], 201);
@@ -2098,7 +2098,7 @@ class Api extends Controller
                 $brand_id = $brand['brand_id'];
                 $data['category_id'] = $brand['category_id'];
                 $data['brand_id'] = $brand['brand_id'];
-                $date['sale_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+                $data['sale_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
                 $peg_size = Brand::select('peg_size', 'btl_size')->where(['id' => $brand_id])->get();
                 $stock = Stock::select('id', 'qty', 'btl_selling_price', 'peg_selling_price')->where(['company_id' => $data['company_id'],  'brand_id' => $brand_id])->get();
                 if ($stock[0]['qty'] > 0) {
@@ -2107,6 +2107,7 @@ class Api extends Controller
                     $MlSize = 0;
                     $MlSize1 = 0;
                     $MlSize2 = 0;
+                    $MlSize3 = 0;
                     if ($isCocktail) {
                         $qty = ($brand['serving_size'] * $dataAr['sale']) / $peg_size[0]['peg_size'];
                         $data['sale_price'] = ($qty * $stock[0]['peg_selling_price']);
@@ -2165,55 +2166,73 @@ class Api extends Controller
                             }
                         }
                     } else {
-                        $data['sale_price'] = ($dataAr['sale'] * $stock[0]['btl_selling_price']);
-                        $MlSize = ($peg_size[0]['btl_size'] * $dataAr['sale']);
+                        // liquour section
+                        // sale
+                        $saleAr = explode('.', $dataAr['sale']);
+                        $saleAr1 = !empty($saleAr[0]) ? $saleAr[0] : 0;
+                        $saleAr2 = !empty($saleAr[1]) ? $saleAr[1] : 0;
+
+                        // nc
+                        $ncAr = explode('.', $dataAr['nc']);
+                        $nc1 = !empty($ncAr[0]) ? $ncAr[0] : 0;
+                        $nc2 = !empty($ncAr[1]) ? $ncAr[1] : 0;
+
+                        // banquet
+                        $banAr = explode('.', $dataAr['banquet']);
+                        $banAr1 = !empty($banAr[0]) ? $banAr[0] : 0;
+                        $banAr2 = !empty($banAr[1]) ? $banAr[1] : 0;
+
+                        // spoilage
+                        $spoAr = explode('.', $dataAr['spoilage']);
+                        $spoAr1 = !empty($spoAr[0]) ? $spoAr[0] : 0;
+                        $spoAr2 = !empty($spoAr[1]) ? $spoAr[1] : 0;
+
+                        $data['sale_price'] = ($saleAr1 * $stock[0]['btl_selling_price']) + ($saleAr2 * $stock[0]['peg_selling_price']);
+
+                        $MlSize = ($peg_size[0]['btl_size'] * $saleAr1) + ($peg_size[0]['peg_size'] * $saleAr2);
                         $data['qty'] = $MlSize;
                         $data['sales_type'] = 1;
                         $success = true;
-                        $result = getBtlPeg($brand_id, $MlSize);
-                        $data['no_btl'] = $result['btl'];
-                        $data['no_peg'] = $result['peg'];
+                        $data['no_btl'] = $saleAr1;
+                        $data['no_peg'] = $saleAr2;
                         $Sales = new Sales($data);
                         if ($Sales->save()) {
                             if ($dataAr['nc'] > 0) {
                                 // calculate qty for complimentary
-                                $data['sale_price'] = ($dataAr['nc'] * $stock[0]['btl_selling_price']);
-                                $MlSize1 = ($peg_size[0]['btl_size'] * $dataAr['nc']);
+                                $data['sale_price'] = ($nc1 * $stock[0]['btl_selling_price']) + ($nc2 * $stock[0]['peg_selling_price']);
+                                $MlSize1 = ($peg_size[0]['btl_size'] * $nc1) + ($peg_size[0]['peg_size'] * $nc2);
                                 $data['qty'] = $MlSize1;
                                 $data['sales_type'] = 2;
-                                $result = getBtlPeg($brand_id, $MlSize1);
-                                $data['no_btl'] = $result['btl'];
-                                $data['no_peg'] = $result['peg'];
+                                $data['no_btl'] = $nc1;
+                                $data['no_peg'] = $nc2;
                                 $Sales = new Sales($data);
                                 $Sales->save();
                             }
                             if ($dataAr['banquet'] > 0) {
                                 // calculate qty for combo
-                                $data['sale_price'] = ($dataAr['banquet'] * $stock[0]['btl_selling_price']);
-                                $MlSize2 = ($peg_size[0]['btl_size'] * $dataAr['banquet']);
+                                $data['sale_price'] = ($banAr1 * $stock[0]['btl_selling_price']) + ($banAr2 * $stock[0]['peg_selling_price']);
+                                $MlSize2 = ($peg_size[0]['btl_size'] * $banAr1) + ($peg_size[0]['peg_size'] * $banAr2);
                                 $data['qty'] = $MlSize2;
                                 $data['sales_type'] = 3;
-                                $result = getBtlPeg($brand_id, $MlSize2);
-                                $data['no_btl'] = $result['btl'];
-                                $data['no_peg'] = $result['peg'];
+                                $data['no_btl'] = $banAr1;
+                                $data['no_peg'] = $banAr2;
                                 $Sales = new Sales($data);
                                 $Sales->save();
                             }
                             if ($dataAr['spoilage'] > 0) {
                                 // calculate qty for combo
-                                $data['sale_price'] = ($dataAr['spoilage'] * $stock[0]['btl_selling_price']);
-                                $MlSize2 = ($peg_size[0]['btl_size'] * $dataAr['spoilage']);
-                                $data['qty'] = $MlSize2;
+                                $data['sale_price'] = ($spoAr1 * $stock[0]['btl_selling_price']) + ($spoAr2 * $stock[0]['peg_selling_price']);
+                                $MlSize2 = ($peg_size[0]['btl_size'] * $spoAr1) + ($peg_size[0]['peg_size'] * $spoAr2);
+                                $data['qty'] = $MlSize3;
                                 $data['sales_type'] = 4;
-                                $result = getBtlPeg($brand_id, $MlSize2);
-                                $data['no_btl'] = $result['btl'];
-                                $data['no_peg'] = $result['peg'];
+                                $data['no_btl'] = $spoAr1;
+                                $data['no_peg'] = $spoAr2;
                                 $Sales = new Sales($data);
                                 $Sales->save();
                             }
                         }
                     }
-                    $total_qty_sold = $MlSize + $MlSize1 + $MlSize2;
+                    $total_qty_sold = $MlSize + $MlSize1 + $MlSize2 + $MlSize3;
                     if ($success) {
                         //update stocks
                         Stock::where(['company_id' => $data['company_id'],  'brand_id' => $brand_id])->decrement('qty', $total_qty_sold);
@@ -2241,7 +2260,7 @@ class Api extends Controller
         }
         if ($counter > 0 || $skipped > 0) {
             return response()->json([
-                'message' => $counter . ' Sales Added, ' . $skipped . 'Entries failed',
+                'message' => $counter . ' Sales Added, ' . $skipped . ' Entries failed',
                 'type' => 'success',
                 'brand' => $failed_data
             ], 201);
@@ -2298,7 +2317,7 @@ class Api extends Controller
             ];
             SaveLog($data_log);
             return response()->json([
-                'message' => $counter . ' Recipe Added, ' . $skipped . 'Entries failed',
+                'message' => $counter . ' Recipe Added, ' . $skipped . ' Entries failed',
                 'type' => 'success',
                 'brand' => $failed_data
             ], 201);
@@ -2312,7 +2331,7 @@ class Api extends Controller
     //getSales
     public function getSalesList(Request $request)
     {
-        $data = Sales::select('brands.name', 'brands.id as brand_id', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.no_peg', 'sales.created_at', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])->orderBy('id', 'DESC')->get();
+        $data = Sales::select('brands.name', 'brands.id as brand_id', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.sale_date', 'sales.no_peg', 'sales.created_at', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])->orderBy('id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -2573,7 +2592,7 @@ class Api extends Controller
                         ->get()->first();
                     $qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
                     $openSum = $openSum + $qty;
-                    $balance = DB::table('purchases')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+                    $balance = DB::table('purchases')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id])->whereBetween('invoice_date', [$request->from_date, $request->to_date])->sum('qty');
                     $receiptSum = $receiptSum + $balance;
 
                     $total = $qty + $balance;
@@ -2864,7 +2883,181 @@ class Api extends Controller
         //exit();
         return json_encode($json);
     }
+    public function BarVarianceReportMl(Request $request)
+    {
+        $Category = Category::select('id', 'name')->get();
+        $json = [];
 
+        foreach ($Category as $Category_data) {
+            // echo "<pre>";print_r($Category_data);
+
+            $brands_data = DB::table("brands")
+                ->select('btl_size', 'category_id', 'id', 'peg_size')
+                ->where('category_id', '=', $Category_data['id'])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))
+                ->get();
+
+            foreach ($brands_data as  $brandList) {
+
+                $brand_size = $brandList->btl_size;
+                //$brand_id = $brandList->id;
+                $data_cat = $Category_data['name'] . "-" . $brand_size;
+
+                $brandName_Data = Brand::where(['category_id' => $brandList->category_id, 'btl_size' => $brand_size])->get();
+                $total = 0;
+                $brand_open_btl = 0;
+
+                $openSum = 0;
+                $receiptSum = 0;
+                $totalSum = 0;
+                $salesSum = 0;
+                $closingSum = 0;
+                $physicalSum = 0;
+                $banquetSum = 0;
+                $spoilageSum = 0;
+                $ncSalesSum = 0;
+                $cocktailSalesSum = 0;
+                $selling_variance = 0;
+                $cost_variance = 0;
+
+                $arrCat = [
+                    'name' => $data_cat,
+                    'open' => '',
+                    'receipt' => '',
+                    'total' => '',
+                    'sales' => '',
+                    'nc_sales' => '',
+                    'cocktail_sales' => '',
+                    'banquet_sales' => '',
+                    'spoilage_sales' => '',
+                    'closing' => '',
+                    'physical' => '',
+                    'variance' => '',
+                    'selling_variance' => '',
+                    'cost_variance' => ''
+                ];
+
+                foreach ($brandName_Data as  $brandListName) {
+                    $isMinus = false;
+
+                    $arr['name'] = $brandListName['name'];
+
+
+                    $data_daily_opening = DB::table("daily_openings")
+                        ->select('qty')
+                        ->where('company_id', '=', $request->company_id)
+                        ->where('date', '=', date('Y-m-d', strtotime($request->from_date . '+1 day')))
+                        ->where('brand_id', '=', $brandListName['id'])
+                        ->get()->first();
+                    $qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
+                    $openSum = $openSum + $qty;
+                    $balance = DB::table('purchases')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id])->whereBetween('invoice_date', [$request->from_date, $request->to_date])->sum('qty');
+                    $receiptSum = $receiptSum + $balance;
+
+                    $total = $qty + $balance;
+                    $totalSum = $totalSum + $total;
+
+                    $sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'sales_type' => '1', 'is_cocktail' => '0'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+
+                    $nc_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'is_cocktail' => '0', 'sales_type' => 2])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+                    $cocktail_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'is_cocktail' => '1'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+
+                    $banquet_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'sales_type' => '3'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+
+                    $spoilage_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'sales_type' => '4'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+
+                    $banquetSum = $banquetSum + $banquet_sales;
+                    $spoilageSum = $spoilageSum + $spoilage_sales;
+                    $ncSalesSum = $ncSalesSum + $nc_sales;
+                    $cocktailSalesSum = $cocktailSalesSum + $cocktail_sales;
+
+
+
+                    $salesSum = $salesSum + $sales;
+                    $closing = ($total - ($sales + $nc_sales + $banquet_sales + $spoilage_sales));
+                    $closingSum = $closingSum + $closing;
+
+                    $PhyQty = Stock::where(['company_id' => $request->company_id, 'brand_id' => $brandListName['id']])->get()->first();
+
+                    $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
+
+                    $physicalSum = $physicalSum + $PhyClosing;
+
+                    $variance = $PhyClosing - $closing;
+
+                    $brand_size = $brandListName['btl_size'];
+                    if ($variance < 0) {
+                        $isMinus = true;
+                        $variance = abs($variance);
+                    }
+
+                    $arr['open'] = $qty;
+                    //$brand_open_btl = $btl_opening++;
+
+                    $arr['receipt'] = $balance;
+
+
+                    $arr['total'] = $total;
+                    $arr['sales'] = $sales;
+
+                    $arr['nc_sales'] = $nc_sales;
+
+
+                    $arr['cocktail_sales'] = $cocktail_sales;
+
+                    $arr['banquet_sales'] = $banquet_sales;
+                    $arr['spoilage_sales'] = $spoilage_sales;
+
+
+                    $arr['closing'] = $closing;
+
+                    $arr['physical'] = $PhyClosing;
+                    $arr['variance'] = $variance;
+
+                    // $arr['selling_price'] = $btl_selling_price;
+
+                    // selling price variance
+
+                    if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0') {
+                        if (!in_array($arrCat, $json)) {
+                            array_push($json, $arrCat);
+                        }
+                        array_push($json, $arr);
+                    }
+                }
+
+                if (count($brandName_Data) > 0) {
+                    $openSum = 0;
+                    $receiptSum = 0;
+                    $totalSum = 0;
+                    $salesSum = 0;
+                    $closingSum = 0;
+                    $physicalSum = 0;
+                    $banquetSum = 0;
+                    $spoilageSum = 0;
+                    $ncSalesSum = 0;
+                    $cocktailSalesSum = 0;
+                    $arr = [
+                        'name' => 'SUBTOTAL',
+                        'open' => $openSum,
+                        'receipt' => $receiptSum,
+                        'total' => $totalSum,
+                        'sales' => $salesSum,
+                        'nc_sales' => $ncSalesSum,
+                        'cocktail_sales' => $cocktailSalesSum,
+                        'banquet_sales' => $banquetSum,
+                        'spoilage_sales' => $spoilageSum,
+                        'closing' => $closingSum,
+                        'physical' => $physicalSum,
+                        'variance' => $physicalSum - $closingSum
+                    ];
+                    if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0')
+                        array_push($json, $arr);
+                }
+            }
+        }
+        //exit();
+        return json_encode($json);
+    }
     public function AddTransaction(Request $request)
     {
         //echo "<pre>";print_r($request);
