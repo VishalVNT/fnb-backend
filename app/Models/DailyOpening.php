@@ -12,6 +12,7 @@ class DailyOpening extends Model
         'company_id',
         'brand_id',
         'qty',
-        'date'
+        'date',
+        'status',
     ];
 }

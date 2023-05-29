@@ -83,6 +83,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/deleteCategory', [Api::class, 'deleteCategory']);
     Route::post('/deleteSubCategory', [Api::class, 'deleteSubCategory']);
     Route::post('/deleteBrand', [Api::class, 'deleteBrand']);
+    Route::post('/deleteOPApi', [Api::class, 'deleteOPApi']);
     Route::post('/deleteRecipe', [Api::class, 'deleteRecipe']);
     Route::post('/deleteRecipeId', [Api::class, 'deleteRecipeId']);
     // delete api ends
