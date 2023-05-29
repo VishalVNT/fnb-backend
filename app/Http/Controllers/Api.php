@@ -518,13 +518,17 @@ class Api extends Controller
         ]);
         $data['btl'] = $request->btl;
         $data['peg'] = $request->peg;
+        $Pbtl = empty($request->Pbtl) ? 0 : $request->Pbtl;
+        $Ppeg = empty($request->Pbtl) ? 0 : $request->Pbtl;
         $data['cost_price'] = $request->cost_price;
         $data['btl_selling_price'] = $request->btl_selling_price;
         $data['peg_selling_price'] = $request->peg_selling_price;
+
         $count = Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->get()->count();
         if ($count > 0) {
             $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $data['brand_id'])->get();
             $MlSize = ($brandSize[0]['btl_size'] * $data['btl']) + ($brandSize[0]['peg_size'] * $data['peg']);
+            $PMlSize = ($brandSize[0]['btl_size'] * $Pbtl) + ($brandSize[0]['peg_size'] * $Ppeg);
             $store_btl = $request->store_btl;
             $store_peg = $request->store_peg;
             $bar1_btl = $request->bar1_btl;
@@ -532,23 +536,25 @@ class Api extends Controller
             $bar2_btl = $request->bar2_btl;
             $bar2_peg = $request->bar2_peg;
             //update stock
-            Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->update(['qty' => $MlSize, 'cost_price' => $data['cost_price'], 'btl_selling_price' => $data['btl_selling_price'], 'peg_selling_price' => $data['peg_selling_price'], 'store_btl' => $store_btl, 'store_peg' => $store_peg, 'bar1_btl' => $bar1_btl, 'bar1_peg' => $bar1_peg, 'bar2_btl' => $bar2_btl, 'bar2_peg' => $bar2_peg, 'physical_closing' => $MlSize]);
+            Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->update(['qty' => $MlSize, 'physical_closing' => $PMlSize, 'cost_price' => $data['cost_price'], 'btl_selling_price' => $data['btl_selling_price'], 'peg_selling_price' => $data['peg_selling_price'], 'store_btl' => $store_btl, 'store_peg' => $store_peg, 'bar1_btl' => $bar1_btl, 'bar1_peg' => $bar1_peg, 'bar2_btl' => $bar2_btl, 'bar2_peg' => $bar2_peg]);
         } else {
             $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $data['brand_id'])->get();
             $MlSize = ($brandSize[0]['btl_size'] * $data['btl']) + ($brandSize[0]['peg_size'] * $data['peg']);
+            $PMlSize = ($brandSize[0]['btl_size'] * $Pbtl) + ($brandSize[0]['peg_size'] * $Ppeg);
             $data['qty'] = $MlSize;
             //Stock entry
-            $data['physical_closing'] = $MlSize;
+            $data['physical_closing'] = $PMlSize;
             $manage_stock = new Stock($data);
             $manage_stock->save();
+            // update daily opening table for storing entry history
+            $opening['company_id'] = $request->company_id;
+            $opening['brand_id'] = $request->brand_id;
+            $opening['qty'] = $MlSize;
+            $opening['date'] = date('Y-m-d');
+            $saveOpening = new DailyOpening($opening);
+            $saveOpening->save();
         }
-        // update daily opening table for storing entry history
-        $opening['company_id'] = $request->company_id;
-        $opening['brand_id'] = $request->brand_id;
-        $opening['qty'] = $MlSize;
-        $opening['date'] = date('Y-m-d');
-        $saveOpening = new DailyOpening($opening);
-        $saveOpening->save();
+
         $data_log = [
             'user_type' => $request->user()->type,
             'user_id' => $request->user()->id,
@@ -1856,8 +1862,8 @@ class Api extends Controller
         $response = [];
         $data = Stock::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get();
         $qty = !empty($data[0]['qty']) ? $data[0]['qty'] : 0;
-        $openingData = DailyOpening::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get();
-        $openingQty = !empty($openingData[0]['qty']) ? $openingData[0]['qty'] : 0;
+        $openingData = DailyOpening::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get()->first();
+        $openingQty = !empty($openingData['qty']) ? $openingData['qty'] : 0;
         $result = getBtlPeg($req['brand_id'], $qty);
         $opening = getBtlPeg($req['brand_id'], $openingQty);
         if (empty($result['btl']) && empty($result['peg'])) {
