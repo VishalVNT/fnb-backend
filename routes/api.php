@@ -118,6 +118,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/updateSales', [Api::class, 'updateSales']);
     Route::post('/AddTransaction', [Api::class, 'AddTransaction']);
     Route::post('/fetchOpeningData', [Api::class, 'fetchOpeningData']);
+    Route::post('/getPhysicalData', [Api::class, 'getPhysicalData']);
 
     // bulk upload Api
     Route::post('/bulkImportCategory', [Api::class, 'bulkImportCategory']);

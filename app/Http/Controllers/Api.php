@@ -2560,7 +2560,7 @@ class Api extends Controller
             // echo "<pre>";print_r($Category_data);
 
             $brands_data = DB::table("brands")
-                ->select('btl_size', 'category_id', 'id', 'peg_size')
+                ->select('btl_size', 'category_id', 'id', 'peg_size', 'subcategory_id')
                 ->where('category_id', '=', $Category_data['id'])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))
                 ->get();
 
@@ -2569,7 +2569,7 @@ class Api extends Controller
                 $brand_size = $brandList->btl_size;
                 //$brand_id = $brandList->id;
                 $data_cat = $Category_data['name'] . "-" . $brand_size;
-
+                $b_type = Subcategory::select('name')->where('id', $brandList->subcategory_id)->get()->first();
                 $brandName_Data = Brand::where(['category_id' => $brandList->category_id, 'btl_size' => $brand_size])->get();
                 $total = 0;
                 $brand_open_btl = 0;
@@ -2588,7 +2588,9 @@ class Api extends Controller
                 $cost_variance = 0;
 
                 $arrCat = [
+                    'Type' => '',
                     'name' => $data_cat,
+                    'btl size' => '',
                     'open' => '',
                     'receipt' => '',
                     'total' => '',
@@ -2600,6 +2602,7 @@ class Api extends Controller
                     'closing' => '',
                     'physical' => '',
                     'variance' => '',
+                    'comsumption' => '',
                     'selling_variance' => '',
                     'cost_variance' => ''
                 ];
@@ -2607,7 +2610,9 @@ class Api extends Controller
                 foreach ($brandName_Data as  $brandListName) {
                     $isMinus = false;
 
+                    $arr['Type'] = $b_type['name'];
                     $arr['name'] = $brandListName['name'];
+                    $arr['btl size'] = $brand_size;
 
 
                     $data_daily_opening = DB::table("daily_openings")
@@ -2760,8 +2765,20 @@ class Api extends Controller
 
                     $arr['closing'] = $btl_closing . "." . $peg_closing;
 
+
+
+
                     $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
                     $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
+                    // comsumption 
+                    $comsumption = $total - $closing;
+                    $btl_comsumption  = 0;
+                    while ($comsumption >= $brand_size) {
+                        $comsumption = $comsumption - $brand_size;
+                        $btl_comsumption++;
+                    }
+                    $peg_comsumption  = intval($comsumption / $brandListName['peg_size']);
+                    $arr['comsumption'] = ($isMinus == true ? '-' : '') . $btl_comsumption . "." . $peg_comsumption;
                     $btl_selling_price = !empty($PhyQty['btl_selling_price']) ? $PhyQty['btl_selling_price'] : 0;
                     $peg_selling_price = !empty($PhyQty['peg_selling_price']) ? $PhyQty['peg_selling_price'] : 0;
 
@@ -2883,9 +2900,18 @@ class Api extends Controller
                     $peg_banquet_all  = $banquetSum / $peg_size;
                     $banquet_all = $banquet_btl_all . "." . $peg_banquet_all;
 
-
+                    // comsumption 
+                    $comsumptionSum = $totalSum - $closingSum;
+                    $btl_comsumption_all  = 0;
+                    while ($comsumptionSum >= $brand_size) {
+                        $comsumptionSum = $comsumptionSum - $brand_size;
+                        $btl_comsumption_all++;
+                    }
+                    $peg_comsumption_all  = intval($comsumptionSum / $brandListName['peg_size']);
                     $arr = [
+                        'Type' => '',
                         'name' => 'SUBTOTAL',
+                        'btl size' => '',
                         'open' => $open_all,
                         'receipt' => $receipt_all,
                         'total' => $total_all,
@@ -2897,7 +2923,7 @@ class Api extends Controller
                         'closing' => $closing_all,
                         'physical' => $physical_all,
                         'variance' => $physical_all - $closing_all,
-                        //'selling_price' => '', // Add your desired value for 'selling_price'
+                        'comsumption' => $btl_comsumption_all . "." . $peg_comsumption_all,
                         'selling_variance' => $selling_variance,
                         'cost_variance' => $cost_variance
                     ];
@@ -3130,6 +3156,31 @@ class Api extends Controller
             $res = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.id', 'daily_openings.qty', 'daily_openings.date', 'categories.name as category', 'stocks.*')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->join('stocks', 'brands.id', '=', 'stocks.brand_id')->where(['daily_openings.company_id' => $data['company_id'], ['brands.name', 'like', '%' . $request->keyword . '%'], 'daily_openings.status' => 1])->groupBy(DB::raw("daily_openings.brand_id"))->get();
         else
             $res = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.id', 'categories.name as category', 'daily_openings.qty', 'daily_openings.date', 'stocks.*')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->join('stocks', 'brands.id', '=', 'stocks.brand_id')->where(['daily_openings.company_id' => $data['company_id'], 'daily_openings.status' => 1])->groupBy(DB::raw("daily_openings.brand_id"))->get();
+        if ($res) {
+            return response()->json($res);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
+    }
+    public function getPhysicalData(Request $request)
+    {
+        $data = $request->validate([
+            'company_id' => 'required'
+        ]);
+        if (!empty($request->keyword))
+            $res = Stock::join('brands', 'stocks.brand_id', '=', 'brands.id', 'physical_closing as qty', 'brands.btl_size', 'brands.peg_size')->join('categories', 'categories.id', '=', 'brands.category_id')
+                ->where('stocks.company_id', $data['company_id'])->where('stocks.physical_closing', '>', 0)
+                ->where('brands.name', 'like', '%' . $request->keyword . '%')
+                ->get();
+
+        else
+            $res = Stock::select('stocks.*', 'brands.name', 'categories.name as category', 'physical_closing as qty', 'brands.btl_size', 'brands.peg_size')->join('brands', 'stocks.brand_id', '=', 'brands.id')->join('categories', 'categories.id', '=', 'brands.category_id')
+                ->where('stocks.company_id', $data['company_id'])->where('stocks.physical_closing', '>', 0)
+                ->get();
+
         if ($res) {
             return response()->json($res);
         } else {
