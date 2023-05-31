@@ -1321,8 +1321,10 @@ class Api extends Controller
         $data = $request->validate([
             'id' => 'required'
         ]);
-        $data = DailyOpening::where('id', $data['id'])->update(['status' => 0]);
-        if ($data) {
+        $daily = DailyOpening::where(['id' => $data['id'], 'status' => 1])->get()->first();
+        Stock::where(['company_id' => $daily['company_id'], 'brand_id' => $daily['brand_id']])->decrement('qty', $daily['qty']);
+        $res = DailyOpening::where('id', $data['id'])->update(['status' => 0]);
+        if ($res) {
             return response()->json([
                 'message' => 'Opening deleted',
                 'type' => 'success'
