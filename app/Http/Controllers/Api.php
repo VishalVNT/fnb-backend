@@ -942,7 +942,7 @@ class Api extends Controller
     // get branch
     public function getCompanyDetail(Request $request)
     {
-        $data = Company::select('*')->where(['status' => 1, 'id' => $request->company_id])->get();
+        $data = Company::where(['status' => 1, 'id' => $request->company_id])->get()->first();
         if ($data) {
             return response()->json($data);
         } else {

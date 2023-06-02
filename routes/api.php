@@ -62,6 +62,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
 
     // new create or save Api
     Route::post('/company', [Api::class, 'company']);
+    Route::post('/getCompanyDetail', [Api::class, 'getCompanyDetail']);
     Route::post('/updateCompany', [Api::class, 'updateCompany']);
     Route::post('/branch', [Api::class, 'branch']);
     Route::post('/user', [Api::class, 'user']);
