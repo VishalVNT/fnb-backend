@@ -1322,7 +1322,7 @@ class Api extends Controller
             'id' => 'required'
         ]);
         $daily = DailyOpening::where(['id' => $data['id'], 'status' => 1])->get()->first();
-        Stock::where(['company_id' => $daily['company_id'], 'brand_id' => $daily['brand_id']])->decrement('qty', $daily['qty']);
+        Stock::where(['company_id' => $daily['company_id'], 'brand_id' => $daily['brand_id']])->decrement('qty', intval($daily['qty']));
         $res = DailyOpening::where('id', $data['id'])->update(['status' => 0]);
         if ($res) {
             return response()->json([
@@ -2924,7 +2924,7 @@ class Api extends Controller
                         'spoilage_sales' => $spoilage_all,
                         'closing' => $closing_all,
                         'physical' => $physical_all,
-                        'variance' => $physical_all - $closing_all,
+                        'variance' => intval($physical_all) - intval($closing_all),
                         'comsumption' => $btl_comsumption_all . "." . $peg_comsumption_all,
                         'selling_variance' => $selling_variance,
                         'cost_variance' => $cost_variance

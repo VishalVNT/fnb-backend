@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class DailyOpening extends Model
 {
     use HasFactory;
+    protected $table = 'daily_openings';
     protected $fillable = [
         'company_id',
         'brand_id',
