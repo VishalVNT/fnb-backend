@@ -519,7 +519,7 @@ class Api extends Controller
         $data['btl'] = $request->btl;
         $data['peg'] = $request->peg;
         $Pbtl = empty($request->Pbtl) ? 0 : $request->Pbtl;
-        $Ppeg = empty($request->Pbtl) ? 0 : $request->Pbtl;
+        $Ppeg = empty($request->Ppeg) ? 0 : $request->Ppeg;
         $data['cost_price'] = $request->cost_price;
         $data['btl_selling_price'] = $request->btl_selling_price;
         $data['peg_selling_price'] = $request->peg_selling_price;
@@ -629,7 +629,7 @@ class Api extends Controller
         ]);
         //
         $data['created_by'] = $request->user()->id;
-        $data['sale_date'] = $request->created_at;
+        $data['sale_date'] = date('Y-m-d', strtotime($request->sale_date));
         $data['description'] = 'liqour sale';
         $brands = explode(',', $request->brand_id);
         $category_id = explode(',', $request->category_id);
@@ -1052,7 +1052,7 @@ class Api extends Controller
     {
         $dateTime = new DateTime($request->date);
         $date = $dateTime->format('Y-m-d');
-        $data = Sales::select('brands.name', 'sales.no_btl', 'sales.no_peg', 'sales.created_at', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where('sales.company_id', $request->company_id)->orderBy('id', 'DESC');
+        $data = Sales::select('brands.name', 'sales.no_btl', 'sales.no_peg', 'sales.created_at', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])->orderBy('id', 'DESC');
         if (!empty($request->keyword))
             $data->where('brands.name', 'like', '%' . $request->keyword . '%');
         if (!empty($request->date))
@@ -1351,7 +1351,7 @@ class Api extends Controller
         $data['court_fees'] = $request->court_fees;
         $data['tcs'] = $request->tcs;
         $data['total_amount'] = $request->total_amount;
-        $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date . ' +1 day'));
+        $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date));
         $data['created_by'] = $request->user()->id;
         $data['batch_no'] = $request->batch_no;
         $data['discount'] = $request->discount;
@@ -1447,7 +1447,7 @@ class Api extends Controller
         $data['tcs'] = $request->tcs;
         $data['total_amount'] = $request->total_amount;
         $data['invoice_no'] = $request->invoice_no;
-        $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date . ' +1 day'));
+        $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date));
         $data['created_by'] = $request->user()->id;
         $data['batch_no'] = $request->batch_no;
         $data['vendor_id'] = $request->vendor_id;
@@ -1478,9 +1478,9 @@ class Api extends Controller
                     $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
                     $OldMlSize = ($brandSize[0]['btl_size'] * $stockEntry[0]['no_btl']);
                     if ($count > 0) {
-                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->decrement('qty', $OldMlSize);
+                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->decrement('qty', intval($OldMlSize));
                         //update stock
-                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->increment('qty', $MlSize);
+                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->increment('qty', intval($MlSize));
                     } else {
                         //Stock entry
                         $stock = new Stock(array(
@@ -1496,8 +1496,22 @@ class Api extends Controller
                 }
             } else {
                 $save = new Purchase($data);
-                if ($save->save())
-                    Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->increment('qty', $MlSize);
+
+                if ($save->save()) {
+                    $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $data['brand_id']])->get()->count();
+                    if ($count > 0)
+                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->increment('qty', intval($MlSize));
+                    else {
+                        $stock = new Stock(array(
+                            'company_id' => $request->company_id,
+                            //'branch_id' => $request->branch_id,
+                            'category_id' => $data['category_id'],
+                            'brand_id' => $data['brand_id'],
+                            'qty' => $MlSize,
+                        ));
+                        $stock->save();
+                    }
+                }
             }
         }
         $log_save = SaveLog([
@@ -1894,7 +1908,7 @@ class Api extends Controller
         }
         $data[0]['op_btl'] = $opening['btl'];
         $data[0]['op_peg'] = intval($opening['peg']);
-        $data[0]['date'] = $openingData['date'];
+        $data[0]['date'] = empty($openingData['date']) ? '' : $openingData['date'];
 
         $data[0]['btl'] = $result['btl'];
         $data[0]['peg'] = intval($result['peg']);
@@ -1960,7 +1974,7 @@ class Api extends Controller
                         $opening['company_id'] = $company_id;
                         $opening['brand_id'] = $brandSize[0]['id'];
                         $opening['qty'] = $MlSize;
-                        $opening['date'] = date('Y-m-d', strtotime($dataArr['date'] . ' +1 day'));
+                        $opening['date'] = date('Y-m-d', strtotime($dataArr['date']));
                         $saveOpening = new DailyOpening($opening);
                         $saveOpening->save();
                     } else {
@@ -2014,7 +2028,7 @@ class Api extends Controller
             $brandName = $dataArr['brand'];
             $btl = intval($dataArr['total']);
             $data['invoice_no'] = $dataArr['invoiceNo'];
-            $data['invoice_date'] = date('Y-m-d', strtotime($dataArr['date'] . ' +1 day'));
+            $data['invoice_date'] = date('Y-m-d', strtotime($dataArr['date']));
             $supplier = Supplier::select('id')->where([['name', 'like', '%' . $dataArr['supplier'] . '%'], 'company_id' => $company_id])->get();
             if (empty($supplier[0]['id'])) {
                 array_push($failedData, $brandName);
@@ -2126,7 +2140,7 @@ class Api extends Controller
                 $brand_id = $brand['brand_id'];
                 $data['category_id'] = $brand['category_id'];
                 $data['brand_id'] = $brand['brand_id'];
-                $data['sale_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+                $data['sale_date'] = date('Y-m-d', strtotime($dataAr['date']));
                 $peg_size = Brand::select('peg_size', 'btl_size')->where(['id' => $brand_id])->get();
                 $stock = Stock::select('id', 'qty', 'btl_selling_price', 'peg_selling_price')->where(['company_id' => $data['company_id'],  'brand_id' => $brand_id])->get();
                 if ($stock[0]['qty'] > 0) {
