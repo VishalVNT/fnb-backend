@@ -629,7 +629,7 @@ class Api extends Controller
         ]);
         //
         $data['created_by'] = $request->user()->id;
-        $data['sale_date'] = date('Y-m-d', strtotime($request->sale_date));
+        $data['sale_date'] = date('Y-m-d', strtotime($request->created_at));
         $data['description'] = 'liqour sale';
         $brands = explode(',', $request->brand_id);
         $category_id = explode(',', $request->category_id);
@@ -1903,7 +1903,7 @@ class Api extends Controller
         $opening = getBtlPeg($req['brand_id'], $openingQty);
         if (empty($result['btl']) && empty($result['peg'])) {
             $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $req['brand_id'])->get();
-            array_push($response, array('btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size']));
+            array_push($response, array('btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size']));
             return $response;
         }
         $data[0]['op_btl'] = $opening['btl'];
@@ -1913,6 +1913,7 @@ class Api extends Controller
         $data[0]['btl'] = $result['btl'];
         $data[0]['peg'] = intval($result['peg']);
         $data[0]['btl_size'] = $result['btl_size'];
+        $data[0]['peg_size'] = $result['peg_size'];
         if ($data) {
             return response()->json($data);
         } else {
@@ -2001,6 +2002,65 @@ class Api extends Controller
 
             return response()->json([
                 'message' => $counter . ' Stock Added, ' . $skipped . ' Entries failed',
+                'type' => 'success',
+                'brand' => $failed_data
+            ], 201);
+        } else {
+            return response()->json([
+                'message' => 'Oops! Operation failed',
+                'type' => 'failed'
+            ], 401);
+        }
+    }
+    public function PhysicalBulkApi(Request $request)
+    {
+        error_reporting(0);
+        $dataArray = $request->data;
+        $company_id = $dataArray[0]['company_id'];
+        // $branch_id = $dataArray[0]['branch_id'];
+        $isSaved = false;
+        $failed_data = [];
+        $skipped = 0;
+        $counter = 0;
+        foreach ($dataArray as $dataArr) {
+            $brandName = $dataArr['brand'];
+            $total = explode('.', $dataArr['total']);
+            $btl = intval($total[0]);
+            $peg = intval($total[1]);
+            $data['company_id'] = $company_id;
+            //$data['branch_id'] = $branch_id;
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%']])->get();
+            if (count($brandSize) > 0) {
+                $count = Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->get()->count();
+                $MlSize = ($brandSize[0]['btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
+                $data['category_id'] = $brandSize[0]['category_id'];
+                $data['brand_id'] = $brandSize[0]['id'];
+                if ($count > 0) {
+                    $data['physical_closing'] = $MlSize;
+                    Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->update($data);
+                } else {
+                    array_push($failed_data, $dataArr['brand']);
+                    $skipped++;
+                }
+                $counter++;
+            } else {
+                array_push($failed_data, $dataArr['brand']);
+                $skipped++;
+            }
+        }
+
+        if ($counter > 0 || $skipped > 0) {
+            $data_log = [
+                'user_type' => $request->user()->type,
+                'user_id' => $request->user()->id,
+                'ip' => $request->ip(),
+                'log' => 'Stock Physical updated',
+                'platform' => 'web'
+            ];
+            SaveLog($data_log);
+
+            return response()->json([
+                'message' => $counter . ' Successful Update, ' . $skipped . ' Entries failed',
                 'type' => 'success',
                 'brand' => $failed_data
             ], 201);
@@ -2667,7 +2727,7 @@ class Api extends Controller
 
                     $PhyQty = Stock::where(['company_id' => $request->company_id, 'brand_id' => $brandListName['id']])->get()->first();
 
-                    $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
+                    $PhyClosing = !empty($PhyQty['physical_closing']) ? $PhyQty['physical_closing'] : 0;
 
                     $physicalSum = $physicalSum + $PhyClosing;
 

@@ -125,6 +125,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/bulkImportCategory', [Api::class, 'bulkImportCategory']);
     Route::post('/bulkImportBrand', [Api::class, 'bulkImportBrand']);
     Route::post('/bulkStockImport', [Api::class, 'bulkStockImport']);
+    Route::post('/PhysicalBulkApi', [Api::class, 'PhysicalBulkApi']);
     Route::post('/bulkPurchaseImport', [Api::class, 'bulkPurchaseImport']);
     Route::post('/bulkImportRecipes', [Api::class, 'bulkImportRecipes']);
     Route::post('/bulkSalesImport', [Api::class, 'bulkSalesImport']);
