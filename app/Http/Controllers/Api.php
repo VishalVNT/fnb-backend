@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use DateTime;
 use App\Models\branch;
 use App\Models\Brand;
+use App\Models\physical_history;
 use App\Models\PurchaseList;
 use App\Models\Company;
 use App\Models\Supplier;
@@ -550,10 +551,17 @@ class Api extends Controller
             $opening['company_id'] = $request->company_id;
             $opening['brand_id'] = $request->brand_id;
             $opening['qty'] = $MlSize;
-            $opening['date'] = date('Y-m-d');
+            $opening['date'] = date('Y-m-d', strtotime($request->openingDate));
             $saveOpening = new DailyOpening($opening);
             $saveOpening->save();
         }
+        $phy['company_id'] = $request->company_id;
+        $phy['brand_id'] = $request->brand_id;
+        $phy['qty'] = $PMlSize;
+        $phy['date'] = date('Y-m-d', strtotime($request->physicalDate));
+        $phy['status'] = 1;
+        $phy_save = new physical_history($phy);
+        $phy_save->save();
 
         $data_log = [
             'user_type' => $request->user()->type,
@@ -1668,12 +1676,13 @@ class Api extends Controller
             ], 401);
         }
     }
-    //getSales
-    public function getSales()
+    // get transaction
+    public function getTransaction(Request $request)
     {
-        $data = Sales::where('status', 1)->get();
-        //  echo "<pre>";print_r($data);exit();
-
+        if ($request->is_sender == 1)
+            $data = Transaction::select('brands.name', 'brands.id as brand_id', 'transactions.no_btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_id' => $request->company_id])->orderBy('id', 'DESC')->get();
+        else
+            $data = Transaction::select('brands.name', 'brands.id as brand_id', 'transactions.no_btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_to_id])->orderBy('id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -2038,6 +2047,14 @@ class Api extends Controller
                 if ($count > 0) {
                     $data['physical_closing'] = $MlSize;
                     Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->update($data);
+
+                    $phy['company_id'] = $company_id;
+                    $phy['brand_id'] = $brandSize[0]['id'];
+                    $phy['qty'] = $request->qty;
+                    $phy['date'] = date('Y-m-d');
+                    $phy['status'] = 1;
+                    $phy_save = new physical_history($phy);
+                    $phy_save->save();
                 } else {
                     array_push($failed_data, $dataArr['brand']);
                     $skipped++;
@@ -2685,11 +2702,9 @@ class Api extends Controller
 
                 foreach ($brandName_Data as  $brandListName) {
                     $isMinus = false;
-
                     $arr['Type'] = $b_type['name'];
                     $arr['name'] = $brandListName['name'];
                     $arr['btl size'] = $brand_size;
-
 
                     $data_daily_opening = DB::table("daily_openings")
                         ->select('qty')
@@ -2719,15 +2734,13 @@ class Api extends Controller
                     $ncSalesSum = $ncSalesSum + $nc_sales;
                     $cocktailSalesSum = $cocktailSalesSum + $cocktail_sales;
 
-
-
                     $salesSum = $salesSum + $sales;
                     $closing = ($total - ($sales + $nc_sales + $banquet_sales + $spoilage_sales));
                     $closingSum = $closingSum + $closing;
 
-                    $PhyQty = Stock::where(['company_id' => $request->company_id, 'brand_id' => $brandListName['id']])->get()->first();
+                    $PhyQty = physical_history::where(['company_id' => $request->company_id, 'brand_id' => $brandListName['id'], 'date' => $request->to_date])->get()->first();
 
-                    $PhyClosing = !empty($PhyQty['physical_closing']) ? $PhyQty['physical_closing'] : 0;
+                    $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
 
                     $physicalSum = $physicalSum + $PhyClosing;
 
@@ -3191,18 +3204,31 @@ class Api extends Controller
         //echo "<pre>";print_r($request);
         $data = $request->validate([
             'company_id' => 'required',
-            'company_to_id' => 'required|string',
-            'brand_id' => 'required|string',
-            'qty' => 'required|string',
+            'company_to_id' => 'required'
         ]);
-
         $data['created_by'] = $request->user()->id;
-        // echo "<pre>";print_r($data);exit();
-        $Transaction = new Transaction($data);
-
-
-
-        if ($Transaction->save()) {
+        $brand = explode(',', $request->brand_id);
+        $nobtl = explode(',', $request->nobtl);
+        $saved = false;
+        $counter = 0;
+        $skipped = 0;
+        foreach ($brand as $key => $item) {
+            $data['brand_id'] = $item;
+            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $data['brand_id'])->get()->first();
+            $MlSize = ($brandSize['btl_size'] * $nobtl[$key]);
+            $data['qty'] = $MlSize;
+            $data['btl'] = $nobtl[$key];
+            $data['date'] = date('Y-m-d', strtotime($request->date));
+            $Transaction = new Transaction($data);
+            if ($Transaction->save()) {
+                Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize);
+                $saved = true;
+                $counter++;
+            } else {
+                $skipped++;
+            }
+        }
+        if ($saved) {
             // logs
             SaveLog([
                 'user_type' => $request->user()->type,
@@ -3212,15 +3238,14 @@ class Api extends Controller
                 'platform' => 'web'
             ]);
             return response()->json([
-                'message' => 'TP Added',
+                'message' => $counter . ' successful, ' . $skipped . ' Entries failed',
                 'type' => 'success'
             ], 201);
-        } else {
-            return response()->json([
-                'message' => 'Oops! Operation failed',
-                'type' => 'failed'
-            ], 401);
         }
+        return response()->json([
+            'message' => 'Oops! Operation failed',
+            'type' => 'failed'
+        ], 401);
     }
     // fetch Tp search
     public function fetchOpeningData(Request $request)

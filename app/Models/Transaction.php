@@ -10,11 +10,12 @@ class Transaction extends Model
     use HasFactory;
     protected $fillable = [
         'company_id',
-        'branch_id',
+        'company_to_id',
         'brand_id',
-        'transaction_type',
         'qty',
+        'btl',
         'log',
+        'date',
         'created_by'
     ];
 }
