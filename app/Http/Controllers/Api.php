@@ -2683,7 +2683,7 @@ class Api extends Controller
                 $arrCat = [
                     'Type' => '',
                     'name' => $data_cat,
-                    'btl size' => '',
+                    'btl_size' => '',
                     'open' => '',
                     'receipt' => '',
                     'total' => '',
@@ -2704,7 +2704,7 @@ class Api extends Controller
                     $isMinus = false;
                     $arr['Type'] = $b_type['name'];
                     $arr['name'] = $brandListName['name'];
-                    $arr['btl size'] = $brand_size;
+                    $arr['btl_size'] = $brand_size;
 
                     $data_daily_opening = DB::table("daily_openings")
                         ->select('qty')
@@ -3000,7 +3000,7 @@ class Api extends Controller
                     $arr = [
                         'Type' => '',
                         'name' => 'SUBTOTAL',
-                        'btl size' => '',
+                        'btl_size' => '',
                         'open' => $open_all,
                         'receipt' => $receipt_all,
                         'total' => $total_all,
