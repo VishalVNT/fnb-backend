@@ -142,6 +142,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
 
     // Dashboard Api
     Route::post('/getSalesList', [Api::class, 'getSalesList']);
+    Route::post('/getTransaction', [Api::class, 'getTransaction']);
     Route::post('/getTopSalesList', [Api::class, 'getTopSalesList']);
     Route::post('/dashboard', [Api::class, 'dashboard']);
 

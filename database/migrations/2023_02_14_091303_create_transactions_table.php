@@ -18,8 +18,8 @@ return new class extends Migration
             $table->integer('company_id');
             $table->integer('company_to_id');
             $table->integer('brand_id');
-            $table->integer('qty');
-            $table->integer('btl');
+            $table->integer('qty')->default(0);
+            $table->integer('btl')->default(0);
             $table->string('log');
             $table->string('date');
             $table->integer('created_by');

@@ -1680,9 +1680,9 @@ class Api extends Controller
     public function getTransaction(Request $request)
     {
         if ($request->is_sender == 1)
-            $data = Transaction::select('brands.name', 'brands.id as brand_id', 'transactions.no_btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_id' => $request->company_id])->orderBy('id', 'DESC')->get();
+            $data = Transaction::select('transactions.id', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
         else
-            $data = Transaction::select('brands.name', 'brands.id as brand_id', 'transactions.no_btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_to_id])->orderBy('id', 'DESC')->get();
+            $data = Transaction::select('brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_to_id])->orderBy('transactions.id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -3221,7 +3221,22 @@ class Api extends Controller
             $data['date'] = date('Y-m-d', strtotime($request->date));
             $Transaction = new Transaction($data);
             if ($Transaction->save()) {
-                Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize);
+                if (Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize)) {
+                    // add item in stocks of receiver company
+                    $stockNum = Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->get()->count();
+                    
+                    if ($stockNum > 0)
+                        Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize); // if item already exist in store
+                    else {
+                        // if item is new in store
+                        $data['company_id'] = $request->company_to_id;
+                        $data['category_id'] = $brandSize['category_id'];
+                        $data['brand_id'] = $data['brand_id'];
+                        $data['qty'] = $MlSize;
+                        $manage_stock = new Stock($data);
+                        $manage_stock->save();
+                    }
+                }
                 $saved = true;
                 $counter++;
             } else {
