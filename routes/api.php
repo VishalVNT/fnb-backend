@@ -62,6 +62,8 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
 
     // new create or save Api
     Route::post('/company', [Api::class, 'company']);
+    Route::post('/getlinkedList', [Api::class, 'getlinkedList']);
+    Route::post('/LinkCompany', [Api::class, 'LinkCompany']);
     Route::post('/getCompanyDetail', [Api::class, 'getCompanyDetail']);
     Route::post('/updateCompany', [Api::class, 'updateCompany']);
     Route::post('/branch', [Api::class, 'branch']);
@@ -87,6 +89,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/deleteOPApi', [Api::class, 'deleteOPApi']);
     Route::post('/deleteRecipe', [Api::class, 'deleteRecipe']);
     Route::post('/deleteRecipeId', [Api::class, 'deleteRecipeId']);
+    Route::post('/deleteLinkApi', [Api::class, 'deleteLinkApi']);
     // delete api ends
 
     // other Api's

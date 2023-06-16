@@ -12,6 +12,7 @@ use App\Models\Supplier;
 use App\Models\DailyOpening;
 use App\Models\User;
 use App\Models\Category;
+use App\Models\LinkCompany;
 use App\Models\purchase;
 use App\Models\Roles;
 use App\Models\Stock;
@@ -299,13 +300,9 @@ class Api extends Controller
             'short_name' => 'required|string',
 
         ]);
-        //
         $data['created_by'] = $request->user()->id;
-
         $category = new Category($data);
-
         if ($category->save()) {
-
             $data_log = [
                 'user_type' => $request->user()->type,
                 'user_id' => $request->user()->id,
@@ -313,28 +310,18 @@ class Api extends Controller
                 'log' => 'Category created',
                 'platform' => 'web'
             ];
-
             $log_save = SaveLog($data_log);
-
             if (($log_save)) {
-
                 return response()->json([
                     'message' => 'Category Added',
                     'type' => 'success'
                 ], 201);
-            } else {
-                return response()->json([
-                    'message' => 'Oops! Operation failed',
-                    'type' => 'failed'
-                ], 401);
             }
-        } else {
-
-            return response()->json([
-                'message' => 'Oops! Operation failed',
-                'type' => 'failed'
-            ], 401);
         }
+        return response()->json([
+            'message' => 'Oops! Operation failed',
+            'type' => 'failed'
+        ], 401);
     }
     public function bulkImportCategory(Request $request)
     {
@@ -1133,8 +1120,18 @@ class Api extends Controller
     public function getCategory()
     {
         $data = Category::where('status', 1)->get();
-        //  echo "<pre>";print_r($data);exit();
-
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
+    }
+    public function getlinkedList(Request $request)
+    {
+        $data = LinkCompany::select('companies.name', 'companies.license_no', 'link_companies.id')->join('companies', 'companies.id', 'link_companies.link_company_id')->where(['link_companies.status' => 1, 'company_id' => $request->company_id])->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -1220,6 +1217,24 @@ class Api extends Controller
         if ($data) {
             return response()->json([
                 'message' => 'Company deleted',
+                'type' => 'success'
+            ], 201);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
+    }
+    public function deleteLinkApi(Request $request)
+    {
+        $data = $request->validate([
+            'id' => 'required'
+        ]);
+        $data = LinkCompany::where('id', $data['id'])->update(['status' => 0]);
+        if ($data) {
+            return response()->json([
+                'message' => 'Company Unlinked',
                 'type' => 'success'
             ], 201);
         } else {
@@ -2850,13 +2865,7 @@ class Api extends Controller
                         $v_btl_closing++;
                     }
                     $v_peg_closing  = intval($variance / $brandListName['peg_size']);
-
-
                     $arr['closing'] = $btl_closing . "." . $peg_closing;
-
-
-
-
                     $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
                     $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
                     // comsumption 
@@ -3024,181 +3033,6 @@ class Api extends Controller
         //exit();
         return json_encode($json);
     }
-    public function BarVarianceReportMl(Request $request)
-    {
-        $Category = Category::select('id', 'name')->get();
-        $json = [];
-
-        foreach ($Category as $Category_data) {
-            // echo "<pre>";print_r($Category_data);
-
-            $brands_data = DB::table("brands")
-                ->select('btl_size', 'category_id', 'id', 'peg_size')
-                ->where('category_id', '=', $Category_data['id'])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))
-                ->get();
-
-            foreach ($brands_data as  $brandList) {
-
-                $brand_size = $brandList->btl_size;
-                //$brand_id = $brandList->id;
-                $data_cat = $Category_data['name'] . "-" . $brand_size;
-
-                $brandName_Data = Brand::where(['category_id' => $brandList->category_id, 'btl_size' => $brand_size])->get();
-                $total = 0;
-                $brand_open_btl = 0;
-
-                $openSum = 0;
-                $receiptSum = 0;
-                $totalSum = 0;
-                $salesSum = 0;
-                $closingSum = 0;
-                $physicalSum = 0;
-                $banquetSum = 0;
-                $spoilageSum = 0;
-                $ncSalesSum = 0;
-                $cocktailSalesSum = 0;
-                $selling_variance = 0;
-                $cost_variance = 0;
-
-                $arrCat = [
-                    'name' => $data_cat,
-                    'open' => '',
-                    'receipt' => '',
-                    'total' => '',
-                    'sales' => '',
-                    'nc_sales' => '',
-                    'cocktail_sales' => '',
-                    'banquet_sales' => '',
-                    'spoilage_sales' => '',
-                    'closing' => '',
-                    'physical' => '',
-                    'variance' => '',
-                    'selling_variance' => '',
-                    'cost_variance' => ''
-                ];
-
-                foreach ($brandName_Data as  $brandListName) {
-                    $isMinus = false;
-
-                    $arr['name'] = $brandListName['name'];
-
-
-                    $data_daily_opening = DB::table("daily_openings")
-                        ->select('qty')
-                        ->where('company_id', '=', $request->company_id)
-                        ->where('date', '=', date('Y-m-d', strtotime($request->from_date . '+1 day')))
-                        ->where('brand_id', '=', $brandListName['id'])
-                        ->get()->first();
-                    $qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
-                    $openSum = $openSum + $qty;
-                    $balance = DB::table('purchases')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id])->whereBetween('invoice_date', [$request->from_date, $request->to_date])->sum('qty');
-                    $receiptSum = $receiptSum + $balance;
-
-                    $total = $qty + $balance;
-                    $totalSum = $totalSum + $total;
-
-                    $sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'sales_type' => '1', 'is_cocktail' => '0'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-
-                    $nc_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'is_cocktail' => '0', 'sales_type' => 2])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-                    $cocktail_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'is_cocktail' => '1'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-
-                    $banquet_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'sales_type' => '3'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-
-                    $spoilage_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'sales_type' => '4'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-
-                    $banquetSum = $banquetSum + $banquet_sales;
-                    $spoilageSum = $spoilageSum + $spoilage_sales;
-                    $ncSalesSum = $ncSalesSum + $nc_sales;
-                    $cocktailSalesSum = $cocktailSalesSum + $cocktail_sales;
-
-
-
-                    $salesSum = $salesSum + $sales;
-                    $closing = ($total - ($sales + $nc_sales + $banquet_sales + $spoilage_sales));
-                    $closingSum = $closingSum + $closing;
-
-                    $PhyQty = Stock::where(['company_id' => $request->company_id, 'brand_id' => $brandListName['id']])->get()->first();
-
-                    $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
-
-                    $physicalSum = $physicalSum + $PhyClosing;
-
-                    $variance = $PhyClosing - $closing;
-
-                    $brand_size = $brandListName['btl_size'];
-                    if ($variance < 0) {
-                        $isMinus = true;
-                        $variance = abs($variance);
-                    }
-
-                    $arr['open'] = $qty;
-                    //$brand_open_btl = $btl_opening++;
-
-                    $arr['receipt'] = $balance;
-
-
-                    $arr['total'] = $total;
-                    $arr['sales'] = $sales;
-
-                    $arr['nc_sales'] = $nc_sales;
-
-
-                    $arr['cocktail_sales'] = $cocktail_sales;
-
-                    $arr['banquet_sales'] = $banquet_sales;
-                    $arr['spoilage_sales'] = $spoilage_sales;
-
-
-                    $arr['closing'] = $closing;
-
-                    $arr['physical'] = $PhyClosing;
-                    $arr['variance'] = $variance;
-
-                    // $arr['selling_price'] = $btl_selling_price;
-
-                    // selling price variance
-
-                    if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0') {
-                        if (!in_array($arrCat, $json)) {
-                            array_push($json, $arrCat);
-                        }
-                        array_push($json, $arr);
-                    }
-                }
-
-                if (count($brandName_Data) > 0) {
-                    $openSum = 0;
-                    $receiptSum = 0;
-                    $totalSum = 0;
-                    $salesSum = 0;
-                    $closingSum = 0;
-                    $physicalSum = 0;
-                    $banquetSum = 0;
-                    $spoilageSum = 0;
-                    $ncSalesSum = 0;
-                    $cocktailSalesSum = 0;
-                    $arr = [
-                        'name' => 'SUBTOTAL',
-                        'open' => $openSum,
-                        'receipt' => $receiptSum,
-                        'total' => $totalSum,
-                        'sales' => $salesSum,
-                        'nc_sales' => $ncSalesSum,
-                        'cocktail_sales' => $cocktailSalesSum,
-                        'banquet_sales' => $banquetSum,
-                        'spoilage_sales' => $spoilageSum,
-                        'closing' => $closingSum,
-                        'physical' => $physicalSum,
-                        'variance' => $physicalSum - $closingSum
-                    ];
-                    if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0')
-                        array_push($json, $arr);
-                }
-            }
-        }
-        //exit();
-        return json_encode($json);
-    }
     public function AddTransaction(Request $request)
     {
         //echo "<pre>";print_r($request);
@@ -3224,7 +3058,7 @@ class Api extends Controller
                 if (Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize)) {
                     // add item in stocks of receiver company
                     $stockNum = Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->get()->count();
-                    
+
                     if ($stockNum > 0)
                         Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize); // if item already exist in store
                     else {
@@ -3256,6 +3090,37 @@ class Api extends Controller
                 'message' => $counter . ' successful, ' . $skipped . ' Entries failed',
                 'type' => 'success'
             ], 201);
+        }
+        return response()->json([
+            'message' => 'Oops! Operation failed',
+            'type' => 'failed'
+        ], 401);
+    }
+
+    public function LinkCompany(Request $request)
+    {
+        $data = $request->validate([
+            'company_id' => 'required',
+            'link_company_id' => 'required',
+
+        ]);
+        $data['created_by'] = $request->user()->id;
+        $company = new LinkCompany($data);
+        if ($company->save()) {
+            $data_log = [
+                'user_type' => $request->user()->type,
+                'user_id' => $request->user()->id,
+                'ip' => $request->ip(),
+                'log' => 'Category created',
+                'platform' => 'web'
+            ];
+            $log_save = SaveLog($data_log);
+            if (($log_save)) {
+                return response()->json([
+                    'message' => 'Company Linked',
+                    'type' => 'success'
+                ], 201);
+            }
         }
         return response()->json([
             'message' => 'Oops! Operation failed',
