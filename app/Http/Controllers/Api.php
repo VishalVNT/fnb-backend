@@ -548,7 +548,15 @@ class Api extends Controller
         $phy['date'] = date('Y-m-d', strtotime($request->physicalDate));
         $phy['status'] = 1;
         $phy_save = new physical_history($phy);
-        $phy_save->save();
+        if ($phy_save->save()) {
+            // physical will be opening for next day
+            $opening['company_id'] = $request->company_id;
+            $opening['brand_id'] = $request->brand_id;
+            $opening['qty'] = $MlSize;
+            $opening['date'] = date('Y-m-d', strtotime($request->openingDate . '+1 day'));
+            $saveOpening = new DailyOpening($opening);
+            $saveOpening->save();
+        }
 
         $data_log = [
             'user_type' => $request->user()->type,
