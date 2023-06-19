@@ -16,7 +16,7 @@ return new class extends Migration
             $table->integer('company_id');
             $table->integer('link_company_id');
             $table->integer('created_by');
-            $table->integer('status')->default(0)->comment('0:inactive,1:active');
+            $table->integer('status')->default(1)->comment('0:inactive,1:active');
             $table->timestamps();
         });
     }

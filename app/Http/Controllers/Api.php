@@ -2671,374 +2671,384 @@ class Api extends Controller
     {
         $Category = Category::select('id', 'name')->get();
         $json = [];
+        // linked companies loop start here
+        $companies = LinkCompany::select('link_company_id as company_id')->where(['company_id' => $request->company_id, 'status' => 1])->get();
+        $data_daily_opening = DB::table("daily_openings")
+            ->select('qty')
+            ->whereIn('company_id', $companies)
+            ->where('date', '=', date('Y-m-d', strtotime($request->from_date . '+1 day')))
+            ->get()->first();
+        return dd($data_daily_opening);
+        foreach ($companies as $key => $company) {
+            foreach ($Category as $Category_data) {
+                // echo "<pre>";print_r($Category_data);
 
-        foreach ($Category as $Category_data) {
-            // echo "<pre>";print_r($Category_data);
+                $brands_data = DB::table("brands")
+                    ->select('btl_size', 'category_id', 'id', 'peg_size', 'subcategory_id')
+                    ->where('category_id', '=', $Category_data['id'])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))
+                    ->get();
 
-            $brands_data = DB::table("brands")
-                ->select('btl_size', 'category_id', 'id', 'peg_size', 'subcategory_id')
-                ->where('category_id', '=', $Category_data['id'])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))
-                ->get();
+                foreach ($brands_data as  $brandList) {
 
-            foreach ($brands_data as  $brandList) {
+                    $brand_size = $brandList->btl_size;
+                    //$brand_id = $brandList->id;
+                    $data_cat = $Category_data['name'] . "-" . $brand_size;
+                    $b_type = Subcategory::select('name')->where('id', $brandList->subcategory_id)->get()->first();
+                    $brandName_Data = Brand::where(['category_id' => $brandList->category_id, 'btl_size' => $brand_size])->get();
+                    $total = 0;
+                    $brand_open_btl = 0;
 
-                $brand_size = $brandList->btl_size;
-                //$brand_id = $brandList->id;
-                $data_cat = $Category_data['name'] . "-" . $brand_size;
-                $b_type = Subcategory::select('name')->where('id', $brandList->subcategory_id)->get()->first();
-                $brandName_Data = Brand::where(['category_id' => $brandList->category_id, 'btl_size' => $brand_size])->get();
-                $total = 0;
-                $brand_open_btl = 0;
+                    $openSum = 0;
+                    $receiptSum = 0;
+                    $totalSum = 0;
+                    $salesSum = 0;
+                    $closingSum = 0;
+                    $physicalSum = 0;
+                    $banquetSum = 0;
+                    $spoilageSum = 0;
+                    $ncSalesSum = 0;
+                    $cocktailSalesSum = 0;
+                    $selling_variance = 0;
+                    $cost_variance = 0;
 
-                $openSum = 0;
-                $receiptSum = 0;
-                $totalSum = 0;
-                $salesSum = 0;
-                $closingSum = 0;
-                $physicalSum = 0;
-                $banquetSum = 0;
-                $spoilageSum = 0;
-                $ncSalesSum = 0;
-                $cocktailSalesSum = 0;
-                $selling_variance = 0;
-                $cost_variance = 0;
-
-                $arrCat = [
-                    'Type' => '',
-                    'name' => $data_cat,
-                    'btl_size' => '',
-                    'open' => '',
-                    'receipt' => '',
-                    'total' => '',
-                    'sales' => '',
-                    'nc_sales' => '',
-                    'cocktail_sales' => '',
-                    'banquet_sales' => '',
-                    'spoilage_sales' => '',
-                    'closing' => '',
-                    'physical' => '',
-                    'variance' => '',
-                    'comsumption' => '',
-                    'selling_variance' => '',
-                    'cost_variance' => ''
-                ];
-
-                foreach ($brandName_Data as  $brandListName) {
-                    $isMinus = false;
-                    $arr['Type'] = $b_type['name'];
-                    $arr['name'] = $brandListName['name'];
-                    $arr['btl_size'] = $brand_size;
-
-                    $data_daily_opening = DB::table("daily_openings")
-                        ->select('qty')
-                        ->where('company_id', '=', $request->company_id)
-                        ->where('date', '=', date('Y-m-d', strtotime($request->from_date . '+1 day')))
-                        ->where('brand_id', '=', $brandListName['id'])
-                        ->get()->first();
-                    $qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
-                    $openSum = $openSum + $qty;
-                    $balance = DB::table('purchases')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id])->whereBetween('invoice_date', [$request->from_date, $request->to_date])->sum('qty');
-                    $receiptSum = $receiptSum + $balance;
-
-                    $total = $qty + $balance;
-                    $totalSum = $totalSum + $total;
-
-                    $sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'sales_type' => '1', 'is_cocktail' => '0'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-
-                    $nc_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'is_cocktail' => '0', 'sales_type' => 2])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-                    $cocktail_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'is_cocktail' => '1'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-
-                    $banquet_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'sales_type' => '3'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-
-                    $spoilage_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $request->company_id, 'sales_type' => '4'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
-
-                    $banquetSum = $banquetSum + $banquet_sales;
-                    $spoilageSum = $spoilageSum + $spoilage_sales;
-                    $ncSalesSum = $ncSalesSum + $nc_sales;
-                    $cocktailSalesSum = $cocktailSalesSum + $cocktail_sales;
-
-                    $salesSum = $salesSum + $sales;
-                    $closing = ($total - ($sales + $nc_sales + $banquet_sales + $spoilage_sales));
-                    $closingSum = $closingSum + $closing;
-
-                    $PhyQty = physical_history::where(['company_id' => $request->company_id, 'brand_id' => $brandListName['id'], 'date' => $request->to_date])->get()->first();
-
-                    $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
-
-                    $physicalSum = $physicalSum + $PhyClosing;
-
-                    $variance = $PhyClosing - $closing;
-
-                    $brand_size = $brandListName['btl_size'];
-                    if ($variance < 0) {
-                        $isMinus = true;
-                        $variance = abs($variance);
-                    }
-
-                    $btl_opening = 0;
-                    while ($qty >= $brand_size) {
-                        $qty = $qty - $brand_size;
-                        $btl_opening++;
-                        $brand_open_btl++;
-                    }
-                    $peg_opening = intval($qty / $brandListName['peg_size']);
-                    $arr['open'] = $btl_opening . "." . $peg_opening;
-                    //$brand_open_btl = $btl_opening++;
-
-
-                    $btl_receipt  = 0;
-                    while ($balance >= $brand_size) {
-                        $balance = $balance - $brand_size;
-                        $btl_receipt++;
-                    }
-                    $peg_receipt  = intval($balance / $brandListName['peg_size']);
-                    $arr['receipt'] = $btl_receipt . "." . $peg_receipt;
-
-                    $btl_total  = 0;
-                    while ($total >= $brand_size) {
-                        $total = $total - $brand_size;
-                        $btl_total++;
-                    }
-                    $peg_total  = intval($total / $brandListName['peg_size']);
-
-                    $arr['total'] = $btl_total . "." . $peg_total;
-                    $btl_sales  = 0;
-                    while ($sales >= $brand_size) {
-                        $sales = $sales - $brand_size;
-                        $btl_sales++;
-                    }
-                    $peg_sales  = intval($sales / $brandListName['peg_size']);
-                    $arr['sales'] = $btl_sales . "." . $peg_sales;
-
-                    //nc sale
-                    //echo "<pre>";print_r($nc_sales);
-                    $btl_nc_sales = 0;
-                    while ($nc_sales >= $brand_size) {
-                        $nc_sales = $nc_sales - $brand_size;
-                        $btl_nc_sales++;
-                    }
-                    $peg_nc_sales  = intval($nc_sales / $brandListName['peg_size']);
-                    $arr['nc_sales'] = $btl_nc_sales . "." . $peg_nc_sales;
-
-                    //bcocktail
-                    $btl_cocktail_sales = 0;
-
-                    while ($cocktail_sales >= $brand_size) {
-                        $cocktail_sales = $cocktail_sales - $brand_size;
-                        $btl_cocktail_sales++;
-                    }
-                    $peg_cocktail_sales  = intval($cocktail_sales / $brandListName['peg_size']);
-                    $arr['cocktail_sales'] = $btl_cocktail_sales . "." . $peg_cocktail_sales;
-
-
-                    //banquet
-                    $btl_banquet_sales = 0;
-
-                    while ($banquet_sales >= $brand_size) {
-                        $banquet_sales = $banquet_sales - $brand_size;
-                        $btl_banquet_sales++;
-                    }
-                    $peg_banquet_sales  = intval($banquet_sales / $brandListName['peg_size']);
-                    $arr['banquet_sales'] = $btl_banquet_sales . "." . $peg_banquet_sales;
-
-                    //banquet
-                    $btl_spoilage_sales = 0;
-
-                    while ($spoilage_sales >= $brand_size) {
-                        $spoilage_sales = $spoilage_sales - $brand_size;
-                        $btl_spoilage_sales++;
-                    }
-                    $peg_spoilage_sales  = intval($spoilage_sales / $brandListName['peg_size']);
-                    $arr['spoilage_sales'] = $btl_spoilage_sales . "." . $peg_spoilage_sales;
-
-                    //  system qty closing
-                    $btl_closing  = 0;
-                    while ($closing >= $brand_size) {
-                        $closing = $closing - $brand_size;
-                        $btl_closing++;
-                    }
-                    $peg_closing  = intval($closing / $brandListName['peg_size']);
-                    // physical qty closing
-                    $p_btl_closing  = 0;
-                    while ($PhyClosing >= $brand_size) {
-                        $PhyClosing = $PhyClosing - $brand_size;
-                        $p_btl_closing++;
-                    }
-                    $p_peg_closing  = intval($PhyClosing / $brandListName['peg_size']);
-                    // variance 
-                    $v_btl_closing  = 0;
-
-                    while ($variance >= $brand_size) {
-                        $variance = $variance - $brand_size;
-                        $v_btl_closing++;
-                    }
-                    $v_peg_closing  = intval($variance / $brandListName['peg_size']);
-                    $arr['closing'] = $btl_closing . "." . $peg_closing;
-                    $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
-                    $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
-                    // comsumption 
-                    $comsumption = $total - $closing;
-                    $btl_comsumption  = 0;
-                    while ($comsumption >= $brand_size) {
-                        $comsumption = $comsumption - $brand_size;
-                        $btl_comsumption++;
-                    }
-                    $peg_comsumption  = intval($comsumption / $brandListName['peg_size']);
-                    $arr['comsumption'] = ($isMinus == true ? '-' : '') . $btl_comsumption . "." . $peg_comsumption;
-                    $btl_selling_price = !empty($PhyQty['btl_selling_price']) ? $PhyQty['btl_selling_price'] : 0;
-                    $peg_selling_price = !empty($PhyQty['peg_selling_price']) ? $PhyQty['peg_selling_price'] : 0;
-
-
-                    $cost_btl_price = !empty($PhyQty['cost_price']) ? $PhyQty['cost_price'] : 0;
-                    $cost_peg_price = $cost_btl_price / ($brandListName['btl_size'] / $brandListName['peg_size']); // calculate peg price from btl cost
-
-                    // $arr['selling_price'] = $btl_selling_price;
-
-                    // selling price variance
-
-                    $arr['selling_variance'] = $v_btl_closing * $btl_selling_price + $v_peg_closing * $peg_selling_price;
-                    $selling_variance = $selling_variance + $arr['selling_variance'];
-
-                    // cost price variance
-                    $arr['cost_variance'] = $v_btl_closing * $cost_btl_price + $v_peg_closing * $cost_peg_price;
-                    $cost_variance = $cost_variance + $arr['cost_variance'];
-
-                    if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0') {
-                        if (!in_array($arrCat, $json)) {
-                            array_push($json, $arrCat);
-                        }
-                        array_push($json, $arr);
-                    }
-                }
-
-                if (count($brandName_Data) > 0) {
-
-                    $peg_size = $brandList->peg_size;
-                    //open all
-                    $open_btl_all = 0;
-                    while ($openSum >= $brand_size) {
-                        $openSum = $openSum - $brand_size;
-                        $open_btl_all++;
-                    }
-                    $peg_open_all  = intval($openSum / $peg_size);
-                    $open_all = $open_btl_all . "." . $peg_open_all;
-
-                    //receipt
-                    $receipt_btl_all = 0;
-                    while ($receiptSum >= $brand_size) {
-                        $receiptSum = $receiptSum - $brand_size;
-                        $receipt_btl_all++;
-                    }
-                    $peg_receipt_all  = intval($receiptSum / $peg_size);
-                    $receipt_all = $receipt_btl_all . "." . $peg_receipt_all;
-
-                    //total
-                    $total_btl_all = 0;
-                    while ($totalSum >= $brand_size) {
-                        $totalSum = $totalSum - $brand_size;
-                        $total_btl_all++;
-                    }
-                    $peg_total_all  = intval($totalSum / $peg_size);
-                    $total_all = $total_btl_all . "." . $peg_total_all;
-
-                    //sales
-                    $sales_btl_all = 0;
-                    while ($salesSum >= $brand_size) {
-                        $salesSum = $salesSum - $brand_size;
-                        $sales_btl_all++;
-                    }
-                    $peg_sales_all  = intval($salesSum / $peg_size);
-                    $sales_all = $sales_btl_all . "." . $peg_sales_all;
-
-                    //closing
-                    $closing_btl_all = 0;
-                    while ($closingSum >= $brand_size) {
-                        $closingSum = $closingSum - $brand_size;
-                        $closing_btl_all++;
-                    }
-                    $peg_closing_all  = intval($closingSum / $peg_size);
-                    $closing_all = $closing_btl_all . "." . $peg_closing_all;
-
-                    //physical
-                    $physical_btl_all = 0;
-                    while ($physicalSum >= $brand_size) {
-                        $physicalSum = $physicalSum - $brand_size;
-                        $physical_btl_all++;
-                    }
-                    $peg_physical_all  = intval($physicalSum / $peg_size);
-                    $physical_all = $physical_btl_all . "." . $peg_physical_all;
-
-                    //spoilageSum
-                    $spoilage_btl_all = 0;
-                    while ($spoilageSum >= $brand_size) {
-                        $spoilageSum = $spoilageSum - $brand_size;
-                        $spoilage_btl_all++;
-                    }
-                    $peg_spoilage_all  = intval($spoilageSum / $peg_size);
-                    $spoilage_all = $spoilage_btl_all . "." . $peg_spoilage_all;
-
-
-                    //ncSalesSum
-                    $ncSales_btl_all = 0;
-                    while ($ncSalesSum >= $brand_size) {
-                        $ncSalesSum = $ncSalesSum - $brand_size;
-                        $ncSales_btl_all++;
-                    }
-                    $peg_ncSales_all  = intval($ncSalesSum / $peg_size);
-                    $ncSales_all = $ncSales_btl_all . "." . $peg_ncSales_all;
-
-
-                    //cocktailSalesSum
-                    $cocktail_btl_all = 0;
-                    while ($cocktailSalesSum >= $brand_size) {
-                        $cocktailSalesSum = $cocktailSalesSum - $brand_size;
-                        $cocktail_btl_all++;
-                    }
-                    $peg_cocktail_all  = intval($cocktailSalesSum / $peg_size);
-                    $cocktail_all = $cocktail_btl_all . "." . $peg_cocktail_all;
-
-                    //banquetSum
-                    $banquet_btl_all = 0;
-                    while ($banquetSum >= $brand_size) {
-                        $banquetSum = $banquetSum - $brand_size;
-                        $banquet_btl_all++;
-                    }
-                    $peg_banquet_all  = $banquetSum / $peg_size;
-                    $banquet_all = $banquet_btl_all . "." . $peg_banquet_all;
-
-                    // comsumption 
-                    $comsumptionSum = $totalSum - $closingSum;
-                    $btl_comsumption_all  = 0;
-                    while ($comsumptionSum >= $brand_size) {
-                        $comsumptionSum = $comsumptionSum - $brand_size;
-                        $btl_comsumption_all++;
-                    }
-                    $peg_comsumption_all  = intval($comsumptionSum / $brandListName['peg_size']);
-                    $arr = [
+                    $arrCat = [
                         'Type' => '',
-                        'name' => 'SUBTOTAL',
+                        'name' => $data_cat,
                         'btl_size' => '',
-                        'open' => $open_all,
-                        'receipt' => $receipt_all,
-                        'total' => $total_all,
-                        'sales' => $sales_all,
-                        'nc_sales' => $ncSales_all,
-                        'cocktail_sales' => $cocktail_all,
-                        'banquet_sales' => $banquet_all,
-                        'spoilage_sales' => $spoilage_all,
-                        'closing' => $closing_all,
-                        'physical' => $physical_all,
-                        'variance' => intval($physical_all) - intval($closing_all),
-                        'comsumption' => $btl_comsumption_all . "." . $peg_comsumption_all,
-                        'selling_variance' => $selling_variance,
-                        'cost_variance' => $cost_variance
+                        'open' => '',
+                        'receipt' => '',
+                        'total' => '',
+                        'sales' => '',
+                        'nc_sales' => '',
+                        'cocktail_sales' => '',
+                        'banquet_sales' => '',
+                        'spoilage_sales' => '',
+                        'closing' => '',
+                        'physical' => '',
+                        'variance' => '',
+                        'comsumption' => '',
+                        'selling_variance' => '',
+                        'cost_variance' => ''
                     ];
-                    if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0')
-                        array_push($json, $arr);
+
+                    foreach ($brandName_Data as  $brandListName) {
+                        $isMinus = false;
+                        $arr['Type'] = $b_type['name'];
+                        $arr['name'] = $brandListName['name'];
+                        $arr['btl_size'] = $brand_size;
+
+                        $data_daily_opening = DB::table("daily_openings")
+                            ->select('qty')
+                            ->where('company_id', '=', $company->company_id)
+                            ->where('date', '=', date('Y-m-d', strtotime($request->from_date . '+1 day')))
+                            ->where('brand_id', '=', $brandListName['id'])
+                            ->get()->first();
+                        $qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
+                        $openSum = $openSum + $qty;
+                        $balance = DB::table('purchases')->where(['brand_id' => $brandListName['id'], 'company_id' => $company->company_id])->whereBetween('invoice_date', [$request->from_date, $request->to_date])->sum('qty');
+                        $receiptSum = $receiptSum + $balance;
+
+                        $total = $qty + $balance;
+                        $totalSum = $totalSum + $total;
+
+                        $sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $company->company_id, 'sales_type' => '1', 'is_cocktail' => '0'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+
+                        $nc_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $company->company_id, 'is_cocktail' => '0', 'sales_type' => 2])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+                        $cocktail_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $company->company_id, 'is_cocktail' => '1'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+
+                        $banquet_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $company->company_id, 'sales_type' => '3'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+
+                        $spoilage_sales = DB::table('sales')->where(['brand_id' => $brandListName['id'], 'company_id' => $company->company_id, 'sales_type' => '4'])->whereBetween('created_at', [$request->from_date, $request->to_date])->sum('qty');
+
+                        $banquetSum = $banquetSum + $banquet_sales;
+                        $spoilageSum = $spoilageSum + $spoilage_sales;
+                        $ncSalesSum = $ncSalesSum + $nc_sales;
+                        $cocktailSalesSum = $cocktailSalesSum + $cocktail_sales;
+
+                        $salesSum = $salesSum + $sales;
+                        $closing = ($total - ($sales + $nc_sales + $banquet_sales + $spoilage_sales));
+                        $closingSum = $closingSum + $closing;
+
+                        $PhyQty = physical_history::where(['company_id' => $company->company_id, 'brand_id' => $brandListName['id'], 'date' => $request->to_date])->get()->first();
+
+                        $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
+
+                        $physicalSum = $physicalSum + $PhyClosing;
+
+                        $variance = $PhyClosing - $closing;
+
+                        $brand_size = $brandListName['btl_size'];
+                        if ($variance < 0) {
+                            $isMinus = true;
+                            $variance = abs($variance);
+                        }
+
+                        $btl_opening = 0;
+                        while ($qty >= $brand_size) {
+                            $qty = $qty - $brand_size;
+                            $btl_opening++;
+                            $brand_open_btl++;
+                        }
+                        $peg_opening = intval($qty / $brandListName['peg_size']);
+                        $arr['open'] = $btl_opening . "." . $peg_opening;
+                        //$brand_open_btl = $btl_opening++;
+
+
+                        $btl_receipt  = 0;
+                        while ($balance >= $brand_size) {
+                            $balance = $balance - $brand_size;
+                            $btl_receipt++;
+                        }
+                        $peg_receipt  = intval($balance / $brandListName['peg_size']);
+                        $arr['receipt'] = $btl_receipt . "." . $peg_receipt;
+
+                        $btl_total  = 0;
+                        while ($total >= $brand_size) {
+                            $total = $total - $brand_size;
+                            $btl_total++;
+                        }
+                        $peg_total  = intval($total / $brandListName['peg_size']);
+
+                        $arr['total'] = $btl_total . "." . $peg_total;
+                        $btl_sales  = 0;
+                        while ($sales >= $brand_size) {
+                            $sales = $sales - $brand_size;
+                            $btl_sales++;
+                        }
+                        $peg_sales  = intval($sales / $brandListName['peg_size']);
+                        $arr['sales'] = $btl_sales . "." . $peg_sales;
+
+                        //nc sale
+                        //echo "<pre>";print_r($nc_sales);
+                        $btl_nc_sales = 0;
+                        while ($nc_sales >= $brand_size) {
+                            $nc_sales = $nc_sales - $brand_size;
+                            $btl_nc_sales++;
+                        }
+                        $peg_nc_sales  = intval($nc_sales / $brandListName['peg_size']);
+                        $arr['nc_sales'] = $btl_nc_sales . "." . $peg_nc_sales;
+
+                        //bcocktail
+                        $btl_cocktail_sales = 0;
+
+                        while ($cocktail_sales >= $brand_size) {
+                            $cocktail_sales = $cocktail_sales - $brand_size;
+                            $btl_cocktail_sales++;
+                        }
+                        $peg_cocktail_sales  = intval($cocktail_sales / $brandListName['peg_size']);
+                        $arr['cocktail_sales'] = $btl_cocktail_sales . "." . $peg_cocktail_sales;
+
+
+                        //banquet
+                        $btl_banquet_sales = 0;
+
+                        while ($banquet_sales >= $brand_size) {
+                            $banquet_sales = $banquet_sales - $brand_size;
+                            $btl_banquet_sales++;
+                        }
+                        $peg_banquet_sales  = intval($banquet_sales / $brandListName['peg_size']);
+                        $arr['banquet_sales'] = $btl_banquet_sales . "." . $peg_banquet_sales;
+
+                        //banquet
+                        $btl_spoilage_sales = 0;
+
+                        while ($spoilage_sales >= $brand_size) {
+                            $spoilage_sales = $spoilage_sales - $brand_size;
+                            $btl_spoilage_sales++;
+                        }
+                        $peg_spoilage_sales  = intval($spoilage_sales / $brandListName['peg_size']);
+                        $arr['spoilage_sales'] = $btl_spoilage_sales . "." . $peg_spoilage_sales;
+
+                        //  system qty closing
+                        $btl_closing  = 0;
+                        while ($closing >= $brand_size) {
+                            $closing = $closing - $brand_size;
+                            $btl_closing++;
+                        }
+                        $peg_closing  = intval($closing / $brandListName['peg_size']);
+                        // physical qty closing
+                        $p_btl_closing  = 0;
+                        while ($PhyClosing >= $brand_size) {
+                            $PhyClosing = $PhyClosing - $brand_size;
+                            $p_btl_closing++;
+                        }
+                        $p_peg_closing  = intval($PhyClosing / $brandListName['peg_size']);
+                        // variance 
+                        $v_btl_closing  = 0;
+
+                        while ($variance >= $brand_size) {
+                            $variance = $variance - $brand_size;
+                            $v_btl_closing++;
+                        }
+                        $v_peg_closing  = intval($variance / $brandListName['peg_size']);
+                        $arr['closing'] = $btl_closing . "." . $peg_closing;
+                        $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
+                        $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
+                        // comsumption 
+                        $comsumption = $total - $closing;
+                        $btl_comsumption  = 0;
+                        while ($comsumption >= $brand_size) {
+                            $comsumption = $comsumption - $brand_size;
+                            $btl_comsumption++;
+                        }
+                        $peg_comsumption  = intval($comsumption / $brandListName['peg_size']);
+                        $arr['comsumption'] = ($isMinus == true ? '-' : '') . $btl_comsumption . "." . $peg_comsumption;
+                        $btl_selling_price = !empty($PhyQty['btl_selling_price']) ? $PhyQty['btl_selling_price'] : 0;
+                        $peg_selling_price = !empty($PhyQty['peg_selling_price']) ? $PhyQty['peg_selling_price'] : 0;
+
+
+                        $cost_btl_price = !empty($PhyQty['cost_price']) ? $PhyQty['cost_price'] : 0;
+                        $cost_peg_price = $cost_btl_price / ($brandListName['btl_size'] / $brandListName['peg_size']); // calculate peg price from btl cost
+
+                        // $arr['selling_price'] = $btl_selling_price;
+
+                        // selling price variance
+
+                        $arr['selling_variance'] = $v_btl_closing * $btl_selling_price + $v_peg_closing * $peg_selling_price;
+                        $selling_variance = $selling_variance + $arr['selling_variance'];
+
+                        // cost price variance
+                        $arr['cost_variance'] = $v_btl_closing * $cost_btl_price + $v_peg_closing * $cost_peg_price;
+                        $cost_variance = $cost_variance + $arr['cost_variance'];
+
+                        if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0') {
+                            if (!in_array($arrCat, $json)) {
+                                array_push($json, $arrCat);
+                            }
+                            array_push($json, $arr);
+                        }
+                    }
+
+                    if (count($brandName_Data) > 0) {
+
+                        $peg_size = $brandList->peg_size;
+                        //open all
+                        $open_btl_all = 0;
+                        while ($openSum >= $brand_size) {
+                            $openSum = $openSum - $brand_size;
+                            $open_btl_all++;
+                        }
+                        $peg_open_all  = intval($openSum / $peg_size);
+                        $open_all = $open_btl_all . "." . $peg_open_all;
+
+                        //receipt
+                        $receipt_btl_all = 0;
+                        while ($receiptSum >= $brand_size) {
+                            $receiptSum = $receiptSum - $brand_size;
+                            $receipt_btl_all++;
+                        }
+                        $peg_receipt_all  = intval($receiptSum / $peg_size);
+                        $receipt_all = $receipt_btl_all . "." . $peg_receipt_all;
+
+                        //total
+                        $total_btl_all = 0;
+                        while ($totalSum >= $brand_size) {
+                            $totalSum = $totalSum - $brand_size;
+                            $total_btl_all++;
+                        }
+                        $peg_total_all  = intval($totalSum / $peg_size);
+                        $total_all = $total_btl_all . "." . $peg_total_all;
+
+                        //sales
+                        $sales_btl_all = 0;
+                        while ($salesSum >= $brand_size) {
+                            $salesSum = $salesSum - $brand_size;
+                            $sales_btl_all++;
+                        }
+                        $peg_sales_all  = intval($salesSum / $peg_size);
+                        $sales_all = $sales_btl_all . "." . $peg_sales_all;
+
+                        //closing
+                        $closing_btl_all = 0;
+                        while ($closingSum >= $brand_size) {
+                            $closingSum = $closingSum - $brand_size;
+                            $closing_btl_all++;
+                        }
+                        $peg_closing_all  = intval($closingSum / $peg_size);
+                        $closing_all = $closing_btl_all . "." . $peg_closing_all;
+
+                        //physical
+                        $physical_btl_all = 0;
+                        while ($physicalSum >= $brand_size) {
+                            $physicalSum = $physicalSum - $brand_size;
+                            $physical_btl_all++;
+                        }
+                        $peg_physical_all  = intval($physicalSum / $peg_size);
+                        $physical_all = $physical_btl_all . "." . $peg_physical_all;
+
+                        //spoilageSum
+                        $spoilage_btl_all = 0;
+                        while ($spoilageSum >= $brand_size) {
+                            $spoilageSum = $spoilageSum - $brand_size;
+                            $spoilage_btl_all++;
+                        }
+                        $peg_spoilage_all  = intval($spoilageSum / $peg_size);
+                        $spoilage_all = $spoilage_btl_all . "." . $peg_spoilage_all;
+
+
+                        //ncSalesSum
+                        $ncSales_btl_all = 0;
+                        while ($ncSalesSum >= $brand_size) {
+                            $ncSalesSum = $ncSalesSum - $brand_size;
+                            $ncSales_btl_all++;
+                        }
+                        $peg_ncSales_all  = intval($ncSalesSum / $peg_size);
+                        $ncSales_all = $ncSales_btl_all . "." . $peg_ncSales_all;
+
+
+                        //cocktailSalesSum
+                        $cocktail_btl_all = 0;
+                        while ($cocktailSalesSum >= $brand_size) {
+                            $cocktailSalesSum = $cocktailSalesSum - $brand_size;
+                            $cocktail_btl_all++;
+                        }
+                        $peg_cocktail_all  = intval($cocktailSalesSum / $peg_size);
+                        $cocktail_all = $cocktail_btl_all . "." . $peg_cocktail_all;
+
+                        //banquetSum
+                        $banquet_btl_all = 0;
+                        while ($banquetSum >= $brand_size) {
+                            $banquetSum = $banquetSum - $brand_size;
+                            $banquet_btl_all++;
+                        }
+                        $peg_banquet_all  = $banquetSum / $peg_size;
+                        $banquet_all = $banquet_btl_all . "." . $peg_banquet_all;
+
+                        // comsumption 
+                        $comsumptionSum = $totalSum - $closingSum;
+                        $btl_comsumption_all  = 0;
+                        while ($comsumptionSum >= $brand_size) {
+                            $comsumptionSum = $comsumptionSum - $brand_size;
+                            $btl_comsumption_all++;
+                        }
+                        $peg_comsumption_all  = intval($comsumptionSum / $brandListName['peg_size']);
+                        $arr = [
+                            'Type' => '',
+                            'name' => 'SUBTOTAL',
+                            'btl_size' => '',
+                            'open' => $open_all,
+                            'receipt' => $receipt_all,
+                            'total' => $total_all,
+                            'sales' => $sales_all,
+                            'nc_sales' => $ncSales_all,
+                            'cocktail_sales' => $cocktail_all,
+                            'banquet_sales' => $banquet_all,
+                            'spoilage_sales' => $spoilage_all,
+                            'closing' => $closing_all,
+                            'physical' => $physical_all,
+                            'variance' => intval($physical_all) - intval($closing_all),
+                            'comsumption' => $btl_comsumption_all . "." . $peg_comsumption_all,
+                            'selling_variance' => $selling_variance,
+                            'cost_variance' => $cost_variance
+                        ];
+                        if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0')
+                            array_push($json, $arr);
+                    }
                 }
             }
         }
-        //exit();
+
+        // linked companies loop end here
         return json_encode($json);
     }
     public function AddTransaction(Request $request)

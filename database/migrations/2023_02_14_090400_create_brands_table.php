@@ -16,9 +16,10 @@ return new class extends Migration
         Schema::create('brands', function (Blueprint $table) {
             $table->id();
             $table->integer('category_id');
+            $table->integer('subcategory_id');
             $table->string('name',100);
             $table->string('short_name',50);
-            $table->integer('btn_size')->comment("in ml");
+            $table->integer('btl_size')->comment("in ml");
             $table->integer('peg_size')->comment("e.g 30ml");
             $table->integer('no_peg')->comment("e.g 30ml");
             $table->integer('created_by');
