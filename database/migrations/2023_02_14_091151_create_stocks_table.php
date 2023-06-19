@@ -24,8 +24,14 @@ return new class extends Migration
             $table->integer('cost_price')->comment("mrp of liqour")->nullable();
             $table->integer('btl_selling_price')->comment("selling price of bottle")->nullable();
             $table->integer('peg_selling_price')->comment("selling price of 1 peg")->nullable();
-            $table->integer('status')->nullable()->default(1)->comment('1:active,0:inactive')->nullable();
-            $table->integer('is_deleted')->nullable()->default(0)->comment('1:active,0:inactive')->nullable();
+            $table->integer('store_btl')->nullable()->default(0);
+            $table->integer('store_peg')->nullable()->default(0);
+            $table->integer('bar1_btl')->nullable()->default(0);
+            $table->integer('bar1_peg')->nullable()->default(0);
+            $table->integer('bar2_btl')->nullable()->default(0);
+            $table->integer('bar2_peg')->nullable()->default(0);
+            $table->integer('status')->nullable()->default(1)->comment('1:active,0:inactive');
+            $table->integer('is_deleted')->nullable()->default(0)->comment('1:active,0:inactive');
             $table->timestamps();
         });
     }

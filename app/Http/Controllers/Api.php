@@ -2673,13 +2673,14 @@ class Api extends Controller
         $json = [];
         // linked companies loop start here
         $companies = LinkCompany::select('link_company_id as company_id')->where(['company_id' => $request->company_id, 'status' => 1])->get();
+
         $data_daily_opening = DB::table("daily_openings")
             ->select('qty')
             ->whereIn('company_id', $companies)
             ->where('date', '=', date('Y-m-d', strtotime($request->from_date . '+1 day')))
             ->get()->first();
-        return dd($data_daily_opening);
         foreach ($companies as $key => $company) {
+            
             foreach ($Category as $Category_data) {
                 // echo "<pre>";print_r($Category_data);
 
