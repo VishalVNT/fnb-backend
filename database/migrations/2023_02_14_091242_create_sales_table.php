@@ -16,14 +16,18 @@ return new class extends Migration
         Schema::create('sales', function (Blueprint $table) {
             $table->id();
             $table->integer('company_id');
+             $table->integer('category_id')->nullable();
             $table->integer('brand_id');
             $table->integer('branch_id');
             $table->integer('qty');
-            //$table->integer('purchase_price');
+            $table->integer('purchase_price');
             $table->integer('sale_price');
             $table->integer('discount');
             $table->integer('final_amount');
             $table->string('description');
+            $table->string('sales_type');
+            $table->integer('no_btl');
+            $table->integer('no_peg');
             $table->integer('created_by');
             $table->integer('status')->nullable()->default(1)->comment('1:active,0:inactive');
             $table->integer('is_deleted')->nullable()->default(0)->comment('1:active,0:inactive'); 

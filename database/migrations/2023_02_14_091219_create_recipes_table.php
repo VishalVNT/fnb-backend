@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('name');
             $table->integer('company_id');
 			$table->integer('branch_id');
+			$table->integer('category_id')->nullable();
 			$table->integer('brand_id');
             $table->integer('serving_size');
             $table->integer('created_by');
