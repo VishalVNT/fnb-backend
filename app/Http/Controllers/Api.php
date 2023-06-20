@@ -2707,6 +2707,8 @@ class Api extends Controller
                 $spoilageSum = 0;
                 $ncSalesSum = 0;
                 $cocktailSalesSum = 0;
+                $transferInSum = 0;
+                $transferOutSum = 0;
                 $selling_variance = 0;
                 $cost_variance = 0;
 
@@ -2725,7 +2727,7 @@ class Api extends Controller
                     'closing' => '',
                     'physical' => '',
                     'variance' => '',
-                    'comsumption' => '',
+                    'consumption' => '',
                     'selling_variance' => '',
                     'cost_variance' => ''
                 ];
@@ -2756,29 +2758,49 @@ class Api extends Controller
                     $total = $qty + $balance;
                     $totalSum = $totalSum + $total;
 
-                    [$sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->where(['brand_id' => $brandListName['id'], 'company_id' => $comArray, 'sales_type' => '1', 'is_cocktail' => '0'])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
+                    [$sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id'], 'sales_type' => '1', 'is_cocktail' => '0'])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
                     $sales = $sales->qty;
 
-                    [$nc_sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->where(['brand_id' => $brandListName['id'], 'company_id' => $comArray, 'is_cocktail' => '0', 'sales_type' => 2])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
+                    [$nc_sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id'], 'is_cocktail' => '0', 'sales_type' => 2])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
                     $nc_sales = $nc_sales->qty;
 
-                    [$cocktail_sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->where(['brand_id' => $brandListName['id'], 'company_id' => $comArray, 'is_cocktail' => '1'])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
+                    [$cocktail_sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id'], 'is_cocktail' => '1'])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
                     $cocktail_sales = $cocktail_sales->qty;
 
-                    [$banquet_sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->where(['brand_id' => $brandListName['id'], 'company_id' => $comArray, 'sales_type' => '3'])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
+                    [$banquet_sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id'], 'sales_type' => '3'])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
                     $banquet_sales = $banquet_sales->qty;
 
-                    [$spoilage_sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->where(['brand_id' => $brandListName['id'], 'company_id' => $comArray, 'sales_type' => '4'])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
+                    [$spoilage_sales] = DB::table('sales')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id'], 'sales_type' => '4'])->whereBetween('created_at', [$request->from_date, $request->to_date])->get();
                     $spoilage_sales = $spoilage_sales->qty;
 
-                    $banquetSum = $banquetSum + $banquet_sales;
-                    $spoilageSum = $spoilageSum + $spoilage_sales;
-                    $ncSalesSum = $ncSalesSum + $nc_sales;
-                    $cocktailSalesSum = $cocktailSalesSum + $cocktail_sales;
+                    // transfer In & Out
 
-                    $salesSum = $salesSum + $sales;
-                    $closing = ($total - ($sales + $nc_sales + $banquet_sales + $spoilage_sales));
-                    $closingSum = $closingSum + $closing;
+                    [$transferIn] = DB::table('transactions')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_to_id', $comArray)->where(['brand_id' => $brandListName['id']])->whereBetween('created_at', [$request->from_date, $request->to_date])->get(); // transfer in
+                    $transferIn = $transferIn->qty;
+
+                    //transfer in btl peg calculation start
+                    $transfer = convertBtlPeg($transferIn, $brand_size, $brandListName['peg_size']);
+                    $arr['transfer_in'] = $transfer['btl'] . "." . $transfer['peg'];
+                    //transfer in btl peg calculation ends
+
+                    [$transferOut] = DB::table('transactions')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id']])->whereBetween('created_at', [$request->from_date, $request->to_date])->get(); // transfer out
+                    $transferOut = $transferOut->qty;
+
+                    //transfer out btl peg calculation start
+                    $transferO = convertBtlPeg($transferOut, $brand_size, $brandListName['peg_size']);
+                    $arr['transfer_out'] = $transferO['btl'] . "." . $transferO['peg'];
+                    //transfer in btl peg calculation ends
+
+
+                    $banquetSum = $banquetSum + $banquet_sales; // sum of banquet
+                    $spoilageSum = $spoilageSum + $spoilage_sales; // sum of spoilage
+                    $ncSalesSum = $ncSalesSum + $nc_sales; // sum of non chargeable
+                    $cocktailSalesSum = $cocktailSalesSum + $cocktail_sales; // sum of cocktails
+                    $transferInSum = $transferInSum + $transferIn; // sum of cocktails
+                    $transferOutSum = $transferOutSum + $transferOut; // sum of cocktails
+                    $salesSum = $salesSum + $sales; // sum of sales
+                    $closing = ($total + $transferOut) - ($sales + $nc_sales + $banquet_sales + $spoilage_sales + $transferIn); // closing formula
+                    $closingSum = $closingSum + $closing;   // closing sum
 
                     [$PhyQty] = physical_history::select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id'], 'date' => $request->to_date])->get();
 
@@ -2895,15 +2917,15 @@ class Api extends Controller
                     $arr['closing'] = $btl_closing . "." . $peg_closing;
                     $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
                     $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
-                    // comsumption 
-                    $comsumption = $total - $closing;
+                    // consumption 
+                    $consumption = $total - $closing;
                     $btl_comsumption  = 0;
-                    while ($comsumption >= $brand_size) {
-                        $comsumption = $comsumption - $brand_size;
+                    while ($consumption >= $brand_size) {
+                        $consumption = $consumption - $brand_size;
                         $btl_comsumption++;
                     }
-                    $peg_comsumption  = intval($comsumption / $brandListName['peg_size']);
-                    $arr['comsumption'] = ($isMinus == true ? '-' : '') . $btl_comsumption . "." . $peg_comsumption;
+                    $peg_comsumption  = intval($consumption / $brandListName['peg_size']);
+                    $arr['consumption'] = ($isMinus == true ? '-' : '') . $btl_comsumption . "." . $peg_comsumption;
                     $btl_selling_price = !empty($PhyQty['btl_selling_price']) ? $PhyQty['btl_selling_price'] : 0;
                     $peg_selling_price = !empty($PhyQty['peg_selling_price']) ? $PhyQty['peg_selling_price'] : 0;
 
@@ -2941,6 +2963,9 @@ class Api extends Controller
                     }
                     $peg_open_all  = intval($openSum / $peg_size);
                     $open_all = $open_btl_all . "." . $peg_open_all;
+
+                    $alltransferIn = convertBtlPeg($openSum, $brand_size, $brandList->peg_size);
+                    $open_all = $transferO['btl'] . "." . $transferO['peg'];
 
                     //receipt
                     $receipt_btl_all = 0;
@@ -3033,6 +3058,14 @@ class Api extends Controller
                         $btl_comsumption_all++;
                     }
                     $peg_comsumption_all  = intval($comsumptionSum / $brandListName['peg_size']);
+
+                    // transfer in
+                    $alltransferIn = convertBtlPeg($transferInSum, $brand_size, $brandListName['peg_size']);
+                    $transfer_all_in = $alltransferIn['btl'] . "." . $alltransferIn['peg'];
+                    // transfer out
+                    $alltransferOut = convertBtlPeg($transferOutSum, $brand_size, $brandListName['peg_size']);
+                    $transfer_all_out = $alltransferOut['btl'] . "." . $alltransferOut['peg'];
+
                     $arr = [
                         'Type' => '',
                         'name' => 'SUBTOTAL',
@@ -3045,10 +3078,12 @@ class Api extends Controller
                         'cocktail_sales' => $cocktail_all,
                         'banquet_sales' => $banquet_all,
                         'spoilage_sales' => $spoilage_all,
+                        'transfer_in' => $transfer_all_in,
+                        'transfer_out' => $transfer_all_out,
                         'closing' => $closing_all,
                         'physical' => $physical_all,
                         'variance' => intval($physical_all) - intval($closing_all),
-                        'comsumption' => $btl_comsumption_all . "." . $peg_comsumption_all,
+                        'consumption' => $btl_comsumption_all . "." . $peg_comsumption_all,
                         'selling_variance' => $selling_variance,
                         'cost_variance' => $cost_variance
                     ];

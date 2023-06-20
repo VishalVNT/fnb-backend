@@ -29,3 +29,18 @@ function getBtlPeg($brand_id, $qty)
 	}
 	return array('btl' => 0, 'peg' => 0, 'btl_size' => 0, 'peg_size' => 0);
 }
+function convertBtlPeg($qty, $brandSize, $peg_size)
+{
+	if ($brandSize > 0) {
+		$brand_size = $brandSize;
+		// system stock
+		$btl = 0;
+		while ($qty >= $brand_size) {
+			$qty = $qty - $brand_size;
+			$btl++;
+		}
+		$peg = $qty / $peg_size;
+		return array('btl' => $btl, 'peg' => $peg, 'btl_size' => $brandSize, 'peg_size' => $peg_size);
+	}
+	return array('btl' => 0, 'peg' => 0, 'btl_size' => 0, 'peg_size' => 0);
+}
