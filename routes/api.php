@@ -45,22 +45,21 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::get('/getCompanies', [Api::class, 'getCompanies']);
     Route::get('/getBranch', [Api::class, 'getBranch']);
     Route::get('/getUsers', [Api::class, 'getUsers']);
-    Route::get('/getSupplier', [Api::class, 'getSupplier']);
     Route::get('/getBrand', [Api::class, 'getBrand']);
     Route::post('/ValidateTp', [Api::class, 'ValidateTp']);
     Route::get('/getCategory', [Api::class, 'getCategory']);
     Route::post('/getAllCompanies', [Api::class, 'getAllCompanies']);
     Route::get('/getCategoryOptions', [Api::class, 'getCategoryOptions']);
     Route::get('/getTypeOptions', [Api::class, 'getTypeOptions']);
-    Route::get('/getSupplierOptions', [Api::class, 'getSupplierOptions']);
     Route::get('/getSales', [Api::class, 'getSales']);
     Route::get('/getRecipe', [Api::class, 'getRecipe']);
-
-
-
+    
+    
     //post methods
-
+    
     // new create or save Api
+    Route::post('/getSupplierOptions', [Api::class, 'getSupplierOptions']);
+    Route::post('/getSupplier', [Api::class, 'getSupplier']);
     Route::post('/company', [Api::class, 'company']);
     Route::post('/getlinkedList', [Api::class, 'getlinkedList']);
     Route::post('/LinkCompany', [Api::class, 'LinkCompany']);

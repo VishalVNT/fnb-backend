@@ -511,12 +511,12 @@ class Api extends Controller
         $data['cost_price'] = $request->cost_price;
         $data['btl_selling_price'] = $request->btl_selling_price;
         $data['peg_selling_price'] = $request->peg_selling_price;
-
+        $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $data['brand_id'])->get();
+        $MlSize = ($brandSize[0]['btl_size'] * $data['btl']) + ($brandSize[0]['peg_size'] * $data['peg']);
+        $PMlSize = ($brandSize[0]['btl_size'] * $Pbtl) + ($brandSize[0]['peg_size'] * $Ppeg);
         $count = Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->get()->count();
         if ($count > 0) {
-            $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $data['brand_id'])->get();
-            $MlSize = ($brandSize[0]['btl_size'] * $data['btl']) + ($brandSize[0]['peg_size'] * $data['peg']);
-            $PMlSize = ($brandSize[0]['btl_size'] * $Pbtl) + ($brandSize[0]['peg_size'] * $Ppeg);
+
             $store_btl = $request->store_btl;
             $store_peg = $request->store_peg;
             $bar1_btl = $request->bar1_btl;
@@ -524,39 +524,44 @@ class Api extends Controller
             $bar2_btl = $request->bar2_btl;
             $bar2_peg = $request->bar2_peg;
             //update stock
-            Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->update(['qty' => $MlSize, 'physical_closing' => $PMlSize, 'cost_price' => $data['cost_price'], 'btl_selling_price' => $data['btl_selling_price'], 'peg_selling_price' => $data['peg_selling_price'], 'store_btl' => $store_btl, 'store_peg' => $store_peg, 'bar1_btl' => $bar1_btl, 'bar1_peg' => $bar1_peg, 'bar2_btl' => $bar2_btl, 'bar2_peg' => $bar2_peg]);
+            if ($request->handleType == 1) {
+                Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->update(['qty' => $PMlSize, 'physical_closing' => $PMlSize, 'cost_price' => $data['cost_price'], 'btl_selling_price' => $data['btl_selling_price'], 'peg_selling_price' => $data['peg_selling_price'], 'store_btl' => $store_btl, 'store_peg' => $store_peg, 'bar1_btl' => $bar1_btl, 'bar1_peg' => $bar1_peg, 'bar2_btl' => $bar2_btl, 'bar2_peg' => $bar2_peg]);
+            } else {
+                Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->update(['qty' => $MlSize, 'physical_closing' => $PMlSize, 'cost_price' => $data['cost_price'], 'btl_selling_price' => $data['btl_selling_price'], 'peg_selling_price' => $data['peg_selling_price'], 'store_btl' => $store_btl, 'store_peg' => $store_peg, 'bar1_btl' => $bar1_btl, 'bar1_peg' => $bar1_peg, 'bar2_btl' => $bar2_btl, 'bar2_peg' => $bar2_peg]);
+            }
         } else {
-            $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $data['brand_id'])->get();
-            $MlSize = ($brandSize[0]['btl_size'] * $data['btl']) + ($brandSize[0]['peg_size'] * $data['peg']);
-            $PMlSize = ($brandSize[0]['btl_size'] * $Pbtl) + ($brandSize[0]['peg_size'] * $Ppeg);
             $data['qty'] = $MlSize;
             //Stock entry
             $data['physical_closing'] = $PMlSize;
             $manage_stock = new Stock($data);
-            $manage_stock->save();
+            if ($manage_stock->save()) {
+                $opening['company_id'] = $request->company_id;
+                $opening['brand_id'] = $request->brand_id;
+                $opening['qty'] = $MlSize;
+                $opening['date'] = date('Y-m-d', strtotime($request->openingDate));
+                $saveOpening = new DailyOpening($opening);
+                $saveOpening->save();
+            }
             // update daily opening table for storing entry history
-            $opening['company_id'] = $request->company_id;
-            $opening['brand_id'] = $request->brand_id;
-            $opening['qty'] = $MlSize;
-            $opening['date'] = date('Y-m-d', strtotime($request->openingDate));
-            $saveOpening = new DailyOpening($opening);
-            $saveOpening->save();
+
         }
-        $phy['company_id'] = $request->company_id;
-        $phy['brand_id'] = $request->brand_id;
-        $phy['qty'] = $PMlSize;
-        $phy['date'] = date('Y-m-d', strtotime($request->physicalDate));
-        $phy['status'] = 1;
-        $phy_save = new physical_history($phy);
-        if ($phy_save->save()) {
-            // physical will be opening for next day
-            $opening['company_id'] = $request->company_id;
-            $opening['brand_id'] = $request->brand_id;
-            $opening['qty'] = $MlSize;
-            $opening['date'] = date('Y-m-d', strtotime($request->openingDate . '+1 day'));
-            $saveOpening = new DailyOpening($opening);
-            $saveOpening->save();
+        if ($request->handleType == 1) {
+            $phy['company_id'] = $request->company_id;
+            $phy['brand_id'] = $request->brand_id;
+            $phy['qty'] = $PMlSize;
+            $phy['date'] = date('Y-m-d', strtotime($request->physicalDate));
+            $phy['status'] = 1;
+            $phy_save = new physical_history($phy);
+            if ($phy_save->save()) {
+                $opening['company_id'] = $request->company_id;
+                $opening['brand_id'] = $request->brand_id;
+                $opening['qty'] = $PMlSize;
+                $opening['date'] = date('Y-m-d', strtotime($request->openingDate));
+                $saveOpening = new DailyOpening($opening);
+                $saveOpening->save();
+            }
         }
+
 
         $data_log = [
             'user_type' => $request->user()->type,
@@ -1085,9 +1090,9 @@ class Api extends Controller
     }
 
     // get supplier
-    public function getSupplier()
+    public function getSupplier(Request $request)
     {
-        $data = Supplier::where('status', 1)->get();
+        $data = Supplier::where(['status' => 1, 'company_id' => $request->company_id])->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -1098,9 +1103,9 @@ class Api extends Controller
         }
     }
     // get supplier
-    public function getSupplierOptions()
+    public function getSupplierOptions(Request $request)
     {
-        $data = Supplier::select('id', 'name as label', 'name as value')->where('status', 1)->get();
+        $data = Supplier::select('id', 'name as label', 'name as value')->where(['status' => 1, 'company_id' => $request->company_id])->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -1703,9 +1708,9 @@ class Api extends Controller
     public function getTransaction(Request $request)
     {
         if ($request->is_sender == 1)
-            $data = Transaction::select('transactions.id', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
+            $data = Transaction::select('transactions.id', 'companies.name as company', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->join('companies', 'companies.id', 'transactions.company_to_id')->where(['transactions.company_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
         else
-            $data = Transaction::select('brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_to_id])->orderBy('transactions.id', 'DESC')->get();
+            $data = Transaction::select('transactions.id', 'brands.name', 'companies.name as company', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'transactions.date')->join('companies', 'companies.id', 'transactions.company_id')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -2711,6 +2716,8 @@ class Api extends Controller
                 $transferOutSum = 0;
                 $selling_variance = 0;
                 $cost_variance = 0;
+                $consumption_cost = 0;
+                $physical_valuation = 0;
 
                 $arrCat = [
                     'Type' => '',
@@ -2729,7 +2736,9 @@ class Api extends Controller
                     'variance' => '',
                     'consumption' => '',
                     'selling_variance' => '',
-                    'cost_variance' => ''
+                    'cost_variance' => '',
+                    'consumption_cost' => '',
+                    'physical_valuation' => ''
                 ];
 
                 foreach ($brandName_Data as  $brandListName) {
@@ -2943,6 +2952,7 @@ class Api extends Controller
                     // cost price variance
                     $arr['cost_variance'] = $v_btl_closing * $cost_btl_price + $v_peg_closing * $cost_peg_price;
                     $cost_variance = $cost_variance + $arr['cost_variance'];
+
 
                     if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0') {
                         if (!in_array($arrCat, $json)) {
