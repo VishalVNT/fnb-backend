@@ -3207,9 +3207,9 @@ class Api extends Controller
             'company_id' => 'required'
         ]);
         if (!empty($request->keyword))
-            $res = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.id', 'daily_openings.qty', 'daily_openings.date', 'categories.name as category', 'stocks.*')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->join('stocks', 'brands.id', '=', 'stocks.brand_id')->where(['daily_openings.company_id' => $data['company_id'], ['brands.name', 'like', '%' . $request->keyword . '%'], 'daily_openings.status' => 1])->groupBy(DB::raw("daily_openings.brand_id"))->get();
+            $res = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.id', 'daily_openings.qty', 'daily_openings.date', 'categories.name as category')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], ['brands.name', 'like', '%' . $request->keyword . '%'], 'daily_openings.status' => 1])->get();
         else
-            $res = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.id', 'categories.name as category', 'daily_openings.qty', 'daily_openings.date', 'stocks.*')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->join('stocks', 'brands.id', '=', 'stocks.brand_id')->where(['daily_openings.company_id' => $data['company_id'], 'daily_openings.status' => 1])->groupBy(DB::raw("daily_openings.brand_id"))->get();
+            $res = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.id', 'categories.name as category', 'daily_openings.qty', 'daily_openings.date')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], 'daily_openings.status' => 1])->get();
         if ($res) {
             return response()->json($res);
         } else {
