@@ -1060,7 +1060,7 @@ class Api extends Controller
     {
         $dateTime = new DateTime($request->date);
         $date = $dateTime->format('Y-m-d');
-        $data = Sales::select('brands.name', 'sales.no_btl', 'sales.no_peg', 'sales.created_at', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])->orderBy('id', 'DESC');
+        $data = Sales::select('brands.name', 'sales.no_btl', 'sales.no_peg', 'sales.sale_date', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])->orderBy('id', 'DESC');
         if (!empty($request->keyword))
             $data->where('brands.name', 'like', '%' . $request->keyword . '%');
         if (!empty($request->date))
@@ -1934,7 +1934,7 @@ class Api extends Controller
         $response = [];
         $data = Stock::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get();
         $qty = !empty($data[0]['qty']) ? $data[0]['qty'] : 0;
-        $openingData = DailyOpening::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get()->first();
+        $openingData = DailyOpening::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->orderBy('id', 'DESC')->get()->first();
         $openingQty = !empty($openingData['qty']) ? $openingData['qty'] : 0;
         $result = getBtlPeg($req['brand_id'], $qty);
         $opening = getBtlPeg($req['brand_id'], $openingQty);
@@ -2478,7 +2478,7 @@ class Api extends Controller
     //getSales
     public function getSalesList(Request $request)
     {
-        $data = Sales::select('brands.name', 'brands.id as brand_id', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.sale_date', 'sales.no_peg', 'sales.created_at', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])->orderBy('id', 'DESC')->get();
+        $data = Sales::select('brands.name', 'brands.id as brand_id', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.sale_date', 'sales.no_peg', 'sales.sale_date', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])->orderBy('id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
