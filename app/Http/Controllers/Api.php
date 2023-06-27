@@ -534,7 +534,7 @@ class Api extends Controller
             //Stock entry
             $data['physical_closing'] = $PMlSize;
             $manage_stock = new Stock($data);
-            if ($manage_stock->save()) {
+            if ($manage_stock->save() && $request->handleType == 0) {
                 $opening['company_id'] = $request->company_id;
                 $opening['brand_id'] = $request->brand_id;
                 $opening['qty'] = $MlSize;
@@ -2688,7 +2688,7 @@ class Api extends Controller
             // echo "<pre>";print_r($Category_data);
 
             $brands_data = DB::table("brands")
-                ->select('btl_size', 'category_id', 'id', 'peg_size', 'subcategory_id')
+                ->select('btl_size', 'btl_size', 'category_id', 'id', 'peg_size', 'subcategory_id')
                 ->where('category_id', '=', $Category_data['id'])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))
                 ->get();
 
@@ -2706,15 +2706,16 @@ class Api extends Controller
                 $receiptSum = 0;
                 $totalSum = 0;
                 $salesSum = 0;
-                $closingSum = 0;
-                $physicalSum = 0;
-                $banquetSum = 0;
-                $spoilageSum = 0;
                 $ncSalesSum = 0;
                 $cocktailSalesSum = 0;
-                $totalConsumtion = 0;
+                $banquetSum = 0;
+                $spoilageSum = 0;
                 $transferInSum = 0;
                 $transferOutSum = 0;
+                $closingSum = 0;
+                $physicalSum = 0;
+                $varianceSum = 0;
+                $totalConsumtion = 0;
                 $selling_variance = 0;
                 $cost_variance = 0;
                 $consumption_cost = 0;
@@ -2793,7 +2794,7 @@ class Api extends Controller
 
                     //transfer in btl peg calculation start
                     $transfer = convertBtlPeg($transferIn, $brand_size, $brandListName['peg_size']);
-                    $arr['transfer_in'] = $transfer['btl'] . "." . $transfer['peg'];
+
                     //transfer in btl peg calculation ends
 
                     [$transferOut] = DB::table('transactions')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id']])->whereBetween('created_at', [$request->from_date, $request->to_date])->get(); // transfer out
@@ -2801,7 +2802,7 @@ class Api extends Controller
 
                     //transfer out btl peg calculation start
                     $transferO = convertBtlPeg($transferOut, $brand_size, $brandListName['peg_size']);
-                    $arr['transfer_out'] = $transferO['btl'] . "." . $transferO['peg'];
+
                     //transfer in btl peg calculation ends
 
 
@@ -2815,14 +2816,14 @@ class Api extends Controller
                     $closing = ($total + $transferOut) - ($sales + $nc_sales + $banquet_sales + $spoilage_sales + $transferIn); // closing formula
                     $closingSum = $closingSum + $closing;   // closing sum
 
-                    [$PhyQty] = physical_history::select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id'], 'date' => $request->to_date])->get();
+                    [$PhyQty] = physical_history::select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id']])->whereDate('date', '=', $request->to_date)->get();
 
                     $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
 
                     $physicalSum = $physicalSum + $PhyClosing;
 
                     $variance = $PhyClosing - $closing;
-
+                    $varianceSum = $varianceSum + $variance;
                     $brand_size = $brandListName['btl_size'];
                     if ($variance < 0) {
                         $isMinus = true;
@@ -2836,6 +2837,7 @@ class Api extends Controller
                         $brand_open_btl++;
                     }
                     $peg_opening = intval($qty / $brandListName['peg_size']);
+
                     $arr['open'] = $btl_opening . "." . $peg_opening;
                     //$brand_open_btl = $btl_opening++;
 
@@ -2904,7 +2906,8 @@ class Api extends Controller
                     }
                     $peg_spoilage_sales  = intval($spoilage_sales / $brandListName['peg_size']);
                     $arr['spoilage_sales'] = $btl_spoilage_sales . "." . $peg_spoilage_sales;
-
+                    $arr['transfer_in'] = $transfer['btl'] . "." . $transfer['peg'];
+                    $arr['transfer_out'] = $transferO['btl'] . "." . $transferO['peg'];
                     //  system qty closing
                     $btl_closing  = 0;
                     while ($closing >= $brand_size) {
@@ -3095,6 +3098,9 @@ class Api extends Controller
                     $alltransferOut = convertBtlPeg($transferOutSum, $brand_size, $brandListName['peg_size']);
                     $transfer_all_out = $alltransferOut['btl'] . "." . $alltransferOut['peg'];
 
+                    $allVariance = convertBtlPeg($varianceSum, $brand_size, $brandListName['peg_size']);
+                    $allVarianceSize = $allVariance['btl'] . "." . $allVariance['peg'];
+
                     $arr = [
                         'Type' => '',
                         'name' => 'SUBTOTAL',
@@ -3111,7 +3117,7 @@ class Api extends Controller
                         'transfer_out' => $transfer_all_out,
                         'closing' => $closing_all,
                         'physical' => $physical_all,
-                        'variance' => intval($physical_all) - intval($closing_all),
+                        'variance' => $allVarianceSize,
                         'total_consumption' => $ConsumptionSUM['btl'] . "." . $ConsumptionSUM['peg'],
                         'consumption' => $btl_comsumption_all . "." . $peg_comsumption_all,
                         'selling_variance' => $selling_variance,
