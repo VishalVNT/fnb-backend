@@ -35,11 +35,12 @@ function convertBtlPeg($qty, $brandSize, $peg_size)
 		$brand_size = $brandSize;
 		// system stock
 		$btl = 0;
-		while ($qty >= $brand_size) {
-			$qty = $qty - $brand_size;
+		$total_q = intval($qty);
+		while ($total_q >= $brand_size) {
+			$total_q = $total_q - $brand_size;
 			$btl++;
 		}
-		$peg = $qty / $peg_size;
+		$peg = $total_q / $peg_size;
 		return array('btl' => $btl, 'peg' => $peg, 'btl_size' => $brandSize, 'peg_size' => $peg_size);
 	}
 	return array('btl' => 0, 'peg' => 0, 'btl_size' => 0, 'peg_size' => 0);

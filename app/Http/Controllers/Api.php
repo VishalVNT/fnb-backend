@@ -2712,6 +2712,7 @@ class Api extends Controller
                 $spoilageSum = 0;
                 $ncSalesSum = 0;
                 $cocktailSalesSum = 0;
+                $totalConsumtion = 0;
                 $transferInSum = 0;
                 $transferOutSum = 0;
                 $selling_variance = 0;
@@ -2731,9 +2732,12 @@ class Api extends Controller
                     'cocktail_sales' => '',
                     'banquet_sales' => '',
                     'spoilage_sales' => '',
+                    'transfer_in' => '',
+                    'transfer_out' => '',
                     'closing' => '',
                     'physical' => '',
                     'variance' => '',
+                    'total_consumption' => '',
                     'consumption' => '',
                     'selling_variance' => '',
                     'cost_variance' => '',
@@ -2926,6 +2930,14 @@ class Api extends Controller
                     $arr['closing'] = $btl_closing . "." . $peg_closing;
                     $arr['physical'] = $p_btl_closing . "." . $p_peg_closing;
                     $arr['variance'] = ($isMinus == true ? '-' : '') . $v_btl_closing . "." . $v_peg_closing;
+
+                    // total consumption 
+                    $total_consumption = intval($sales + $nc_sales + $cocktail_sales + $banquet_sales + $spoilage_sales);
+                    $totalConsumtion = $totalConsumtion + $total_consumption;
+                    $totalConsumption = convertBtlPeg($total_consumption, $brand_size, $brandList->peg_size);
+                    $arr['total_consumption'] = $totalConsumption['btl'] . "." . $totalConsumption['peg'];
+
+
                     // consumption 
                     $consumption = $total - $closing;
                     $btl_comsumption  = 0;
@@ -2935,6 +2947,8 @@ class Api extends Controller
                     }
                     $peg_comsumption  = intval($consumption / $brandListName['peg_size']);
                     $arr['consumption'] = ($isMinus == true ? '-' : '') . $btl_comsumption . "." . $peg_comsumption;
+
+                    // cost price
                     $btl_selling_price = !empty($PhyQty['btl_selling_price']) ? $PhyQty['btl_selling_price'] : 0;
                     $peg_selling_price = !empty($PhyQty['peg_selling_price']) ? $PhyQty['peg_selling_price'] : 0;
 
@@ -2943,6 +2957,9 @@ class Api extends Controller
                     $cost_peg_price = $cost_btl_price / ($brandListName['btl_size'] / $brandListName['peg_size']); // calculate peg price from btl cost
 
                     // $arr['selling_price'] = $btl_selling_price;
+                    // cost price variance
+                    $arr['cost_variance'] = $v_btl_closing * $cost_btl_price + $v_peg_closing * $cost_peg_price;
+                    $cost_variance = $cost_variance + $arr['cost_variance'];
 
                     // selling price variance
 
@@ -2950,8 +2967,12 @@ class Api extends Controller
                     $selling_variance = $selling_variance + $arr['selling_variance'];
 
                     // cost price variance
-                    $arr['cost_variance'] = $v_btl_closing * $cost_btl_price + $v_peg_closing * $cost_peg_price;
-                    $cost_variance = $cost_variance + $arr['cost_variance'];
+                    $arr['consumption_cost'] = $btl_comsumption * $cost_btl_price + $peg_comsumption * $cost_peg_price;
+                    $consumption_cost = $consumption_cost + $arr['consumption_cost'];
+
+                    // cost price variance
+                    $arr['physical_valuation'] = $p_btl_closing * $cost_btl_price + $p_peg_closing * $cost_peg_price;
+                    $physical_valuation = $physical_valuation + $arr['physical_valuation'];
 
 
                     if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0') {
@@ -2973,9 +2994,6 @@ class Api extends Controller
                     }
                     $peg_open_all  = intval($openSum / $peg_size);
                     $open_all = $open_btl_all . "." . $peg_open_all;
-
-                    $alltransferIn = convertBtlPeg($openSum, $brand_size, $brandList->peg_size);
-                    $open_all = $transferO['btl'] . "." . $transferO['peg'];
 
                     //receipt
                     $receipt_btl_all = 0;
@@ -3059,7 +3077,8 @@ class Api extends Controller
                     }
                     $peg_banquet_all  = $banquetSum / $peg_size;
                     $banquet_all = $banquet_btl_all . "." . $peg_banquet_all;
-
+                    // TOTAL CONSUMPTION 
+                    $ConsumptionSUM = convertBtlPeg($totalConsumtion, $brand_size, $brandListName['peg_size']);
                     // comsumption 
                     $comsumptionSum = $totalSum - $closingSum;
                     $btl_comsumption_all  = 0;
@@ -3093,9 +3112,12 @@ class Api extends Controller
                         'closing' => $closing_all,
                         'physical' => $physical_all,
                         'variance' => intval($physical_all) - intval($closing_all),
+                        'total_consumption' => $ConsumptionSUM['btl'] . "." . $ConsumptionSUM['peg'],
                         'consumption' => $btl_comsumption_all . "." . $peg_comsumption_all,
                         'selling_variance' => $selling_variance,
-                        'cost_variance' => $cost_variance
+                        'cost_variance' => $cost_variance,
+                        'consumption_cost' => $consumption_cost,
+                        'physical_valuation' => $physical_valuation
                     ];
                     if ($arr['total'] != '0.0' || $arr['closing'] != '0.0' || $arr['physical'] != '0.0')
                         array_push($json, $arr);
@@ -3219,6 +3241,30 @@ class Api extends Controller
             ]);
         }
     }
+    public function getPriceList(Request $request)
+    {
+        $data = $request->validate([
+            'company_id' => 'required'
+        ]);
+        if (!empty($request->keyword))
+            $res = Stock::join('brands', 'stocks.brand_id', '=', 'brands.id', 'cost_price', 'btl_selling_price', 'brands.btl_size', 'brands.peg_size')->join('categories', 'categories.id', '=', 'brands.category_id')
+                ->where('stocks.company_id', $data['company_id'])
+                ->where('brands.name', 'like', '%' . $request->keyword . '%')
+                ->get();
+
+        else
+            $res = Stock::select('stocks.*', 'brands.name', 'categories.name as category', 'cost_price', 'btl_selling_price', 'brands.btl_size', 'brands.peg_size')->join('brands', 'stocks.brand_id', '=', 'brands.id')->join('categories', 'categories.id', '=', 'brands.category_id')
+                ->where('stocks.company_id', $data['company_id'])
+                ->get();
+        if ($res) {
+            return response()->json($res);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
+    }
     public function getPhysicalData(Request $request)
     {
         $data = $request->validate([
@@ -3243,5 +3289,138 @@ class Api extends Controller
                 'type' => 'failed'
             ]);
         }
+    }
+
+    public function BarVarianceSummaryReport(Request $request)
+    {
+        $json = [];
+        $comArray = [];
+        array_push($comArray, $request->company_id);
+        $brands_data = DB::table("brands")
+            ->select('id')
+            ->get();
+
+        $brandTotals = [];
+        $cosTotal = [];
+        $purchaseTotal = [];
+        $opening_total = [];  //$opening_qty
+
+        foreach ($brands_data as  $brandList) {
+            $brnad_id = $brandList->id;
+            [$data_daily_opening] = DB::table('daily_openings')
+                ->select(DB::raw('SUM(qty) AS qty'))
+                ->whereIn('company_id', $comArray)
+                ->where('brand_id', $brnad_id)
+                ->whereBetween('date', [$request->from_date, $request->to_date])
+                ->get();
+            $opening_qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
+
+            [$balance] = DB::table('purchases')
+                ->select(DB::raw('SUM(qty) AS qty'))
+                ->where('brand_id', $brnad_id)
+                ->whereIn('company_id', $comArray)
+                ->whereBetween('invoice_date', [$request->from_date, $request->to_date])
+                ->get();
+            $purchase_qty = !empty($balance->qty) ? $balance->qty : 0;
+
+            $total = $opening_qty + $purchase_qty;
+
+            [$stock] = DB::table('stocks')
+                ->select(DB::raw('COALESCE(SUM(cost_price), 0) as cost_price'))
+                ->whereIn('company_id', $comArray)
+                ->where('brand_id', $brnad_id)
+                ->whereBetween('created_at', [$request->from_date, $request->to_date])
+                ->get();
+            $purchase_price =  !empty($stock->cost_price) ? $stock->cost_price : 0;
+
+            //print_r($purchase_price);exit;
+
+            if (isset($purchaseTotal['purchase'])) {
+                $purchaseTotal['purchase'] += $purchase_price;
+            } else {
+                $purchaseTotal['purchase'] = $purchase_price;
+            }
+
+            [$salesStocks] = DB::table('sales')
+                ->select(DB::raw('COALESCE(SUM(qty), 0) as saleQty'))
+                ->whereIn('company_id', $comArray)
+                ->whereBetween('created_at', [$request->from_date, $request->to_date])
+                ->get();
+            $sale_qty =  !empty($salesStocks->saleQty) ? $salesStocks->saleQty : 0;
+
+            [$physical_stock] = DB::table('physical_histories')
+                ->select(DB::raw('COALESCE(SUM(qty), 0) as physicalQty'))
+                ->whereIn('company_id', $comArray)
+                ->where('brand_id', $brnad_id)
+                ->whereBetween('date', [$request->from_date, $request->to_date])
+                ->get();
+            $physical_qty = !empty($stock->physicalQty) ? $stock->physicalQty : 0;
+
+            $closing = $total - $sale_qty;
+
+            $consumption = $total - $physical_qty;
+            //	$cost_of_consumption= $purchase_price * $consumption;
+
+            $cost_of_consumption = $purchaseTotal['purchase'] * $consumption;
+
+            $variance = $physical_qty - $closing;
+            if ($variance < 0) {
+                $shortage = abs($variance);
+                $excess = 0;
+            } else {
+                $shortage = 0;
+                $excess = $variance;
+            }
+            $adjusted_variance = $shortage - $excess;
+            $shortage_beverage = 0;
+            $shortage_total = $shortage + $shortage_beverage;
+
+            $excess_beverage = 0;
+            $excess_total = $excess + $excess_beverage;
+            $adjusted_variance_beverage = 0;
+            $adjusted_variance_total = $adjusted_variance + $adjusted_variance_beverage;
+
+            // Calculate sum of cost_of_consumption for each brand
+            if (isset($brandTotals['Liquor'])) {
+                $brandTotals['Liquor'] += $cost_of_consumption;
+            } else {
+                $brandTotals['Liquor'] = $cost_of_consumption;
+            }
+            $beverage = 0;
+            $cosTotal = $brandTotals['Liquor'] + $beverage;
+
+            /*	 */
+        }
+
+        $arr['Net Sales Revenue'] = [
+            'Liquor' => $request->liquor !== null ? $request->liquor : 0,
+            'Beverage' => $request->beverage ?? 0,
+            'Total' => ($request->liquor !== null ? $request->liquor : 0) + ($request->beverage ?? 0)
+        ];
+
+        $arr['Cost of Consumption'] = [
+            'Liquor' => $brandTotals['Liquor'],
+            'Beverage' => $beverage,
+            'Total' => $cosTotal
+        ];
+        $arr['Shortage'] = [
+            'Liquor' => $shortage,
+            'Beverage' => 0,
+            'Total' => $shortage_total
+        ];
+
+        $arr['Excess'] = [
+            'Liquor' => $excess_total,
+            'Beverage' => 0,
+            'Total' => $excess_total
+        ];
+
+        $arr['Adjusted Variance'] = [
+            'Liquor' => $adjusted_variance,
+            'Beverage' => 0,
+            'Total' => $adjusted_variance_total
+        ];
+        array_push($json, $arr);
+        return json_encode($json);
     }
 }
