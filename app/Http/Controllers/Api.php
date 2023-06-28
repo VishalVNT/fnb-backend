@@ -1667,7 +1667,7 @@ class Api extends Controller
     public function getAllBrandSales(Request $request)
     {
         $dataArray = array();
-        $brands = Brand::select('name as value', DB::raw('CONCAT(brands.id," - ",name," - ",btl_size) as label'), 'brands.id', 'brands.category_id', DB::raw('0 as recipe'))->join('stocks', 'stocks.brand_id', '=', 'brands.id')->where(['brands.status' => 1, 'stocks.company_id' => $request->company_id])->get();
+        $brands = Brand::select('name as value', DB::raw('CONCAT(brands.id," - ",name," - ",btl_size) as label'), 'brands.id', 'brands.category_id', DB::raw('0 as recipe'))->join('stocks', 'stocks.brand_id', '=', 'brands.id')->where(['brands.status' => 1, 'stocks.company_id' => $request->company_id, ['stocks.qty', '>', 0]])->get();
         if ($brands) {
             foreach ($brands as $brand) {
                 array_push($dataArray, $brand);
@@ -1708,9 +1708,9 @@ class Api extends Controller
     public function getTransaction(Request $request)
     {
         if ($request->is_sender == 1)
-            $data = Transaction::select('transactions.id', 'companies.name as company', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->join('companies', 'companies.id', 'transactions.company_to_id')->where(['transactions.company_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
+            $data = Transaction::select('transactions.id', 'companies.name as company', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'brands.btl_size',  'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->join('companies', 'companies.id', 'transactions.company_to_id')->where(['transactions.company_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
         else
-            $data = Transaction::select('transactions.id', 'brands.name', 'companies.name as company', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'transactions.date')->join('companies', 'companies.id', 'transactions.company_id')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
+            $data = Transaction::select('transactions.id', 'brands.name', 'companies.name as company', 'brands.id as brand_id', 'transactions.btl', 'brands.btl_size', 'transactions.qty', 'transactions.date')->join('companies', 'companies.id', 'transactions.company_id')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -2714,7 +2714,6 @@ class Api extends Controller
                 $transferOutSum = 0;
                 $closingSum = 0;
                 $physicalSum = 0;
-                $varianceSum = 0;
                 $totalConsumtion = 0;
                 $selling_variance = 0;
                 $cost_variance = 0;
@@ -2755,7 +2754,7 @@ class Api extends Controller
                     [$data_daily_opening] = DB::table('daily_openings')
                         ->select(DB::raw('SUM(qty) AS qty'))
                         ->whereIn('company_id', $comArray)
-                        ->where('date', '=', date('Y-m-d', strtotime($request->from_date . '+1 day')))
+                        ->where('date', '=', date('Y-m-d', strtotime($request->from_date)))
                         ->where('brand_id', $brandListName['id'])
                         ->get();
                     $qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
@@ -2789,7 +2788,7 @@ class Api extends Controller
 
                     // transfer In & Out
 
-                    [$transferIn] = DB::table('transactions')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_to_id', $comArray)->where(['brand_id' => $brandListName['id']])->whereBetween('created_at', [$request->from_date, $request->to_date])->get(); // transfer in
+                    [$transferIn] = DB::table('transactions')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_to_id', $comArray)->where(['brand_id' => $brandListName['id']])->whereBetween('date', [$request->from_date, $request->to_date])->get(); // transfer in
                     $transferIn = $transferIn->qty;
 
                     //transfer in btl peg calculation start
@@ -2797,7 +2796,7 @@ class Api extends Controller
 
                     //transfer in btl peg calculation ends
 
-                    [$transferOut] = DB::table('transactions')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id']])->whereBetween('created_at', [$request->from_date, $request->to_date])->get(); // transfer out
+                    [$transferOut] = DB::table('transactions')->select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id']])->whereBetween('date', [$request->from_date, $request->to_date])->get(); // transfer out
                     $transferOut = $transferOut->qty;
 
                     //transfer out btl peg calculation start
@@ -2818,12 +2817,15 @@ class Api extends Controller
 
                     [$PhyQty] = physical_history::select(DB::raw('SUM(qty) AS qty'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id']])->whereDate('date', '=', $request->to_date)->get();
 
+                    [$ItemCost] = Stock::select(DB::raw('AVG(cost_price) AS cost_price'), DB::raw('AVG(btl_selling_price) AS btl_selling_price'))->whereIn('company_id', $comArray)->where(['brand_id' => $brandListName['id']])->get();
+
                     $PhyClosing = !empty($PhyQty['qty']) ? $PhyQty['qty'] : 0;
+                    $cost_price = !empty($ItemCost['cost_price']) ? $ItemCost['cost_price'] : 0;
+                    $btl_selling_price = !empty($ItemCost['btl_selling_price']) ? $ItemCost['btl_selling_price'] : 0;
 
                     $physicalSum = $physicalSum + $PhyClosing;
 
                     $variance = $PhyClosing - $closing;
-                    $varianceSum = $varianceSum + $variance;
                     $brand_size = $brandListName['btl_size'];
                     if ($variance < 0) {
                         $isMinus = true;
@@ -2952,29 +2954,24 @@ class Api extends Controller
                     $arr['consumption'] = ($isMinus == true ? '-' : '') . $btl_comsumption . "." . $peg_comsumption;
 
                     // cost price
-                    $btl_selling_price = !empty($PhyQty['btl_selling_price']) ? $PhyQty['btl_selling_price'] : 0;
-                    $peg_selling_price = !empty($PhyQty['peg_selling_price']) ? $PhyQty['peg_selling_price'] : 0;
 
 
-                    $cost_btl_price = !empty($PhyQty['cost_price']) ? $PhyQty['cost_price'] : 0;
-                    $cost_peg_price = $cost_btl_price / ($brandListName['btl_size'] / $brandListName['peg_size']); // calculate peg price from btl cost
-
-                    // $arr['selling_price'] = $btl_selling_price;
-                    // cost price variance
-                    $arr['cost_variance'] = $v_btl_closing * $cost_btl_price + $v_peg_closing * $cost_peg_price;
-                    $cost_variance = $cost_variance + $arr['cost_variance'];
-
-                    // selling price variance
+                    $peg_selling_price = $btl_selling_price / ($brandListName['btl_size'] / $brandListName['peg_size']); // calculate peg price from btl cost
+                    $cost_peg_price = $cost_price / ($brandListName['btl_size'] / $brandListName['peg_size']); // calculate peg price from btl cost
 
                     $arr['selling_variance'] = $v_btl_closing * $btl_selling_price + $v_peg_closing * $peg_selling_price;
                     $selling_variance = $selling_variance + $arr['selling_variance'];
 
                     // cost price variance
-                    $arr['consumption_cost'] = $btl_comsumption * $cost_btl_price + $peg_comsumption * $cost_peg_price;
+                    $arr['cost_variance'] = $v_btl_closing * $cost_price + $v_peg_closing * $cost_peg_price;
+                    $cost_variance = $cost_variance + $arr['cost_variance'];
+
+                    // cost price variance
+                    $arr['consumption_cost'] = $btl_comsumption * $cost_price + $peg_comsumption * $cost_peg_price;
                     $consumption_cost = $consumption_cost + $arr['consumption_cost'];
 
                     // cost price variance
-                    $arr['physical_valuation'] = $p_btl_closing * $cost_btl_price + $p_peg_closing * $cost_peg_price;
+                    $arr['physical_valuation'] = $p_btl_closing * $cost_price + $p_peg_closing * $cost_peg_price;
                     $physical_valuation = $physical_valuation + $arr['physical_valuation'];
 
 
@@ -3098,9 +3095,6 @@ class Api extends Controller
                     $alltransferOut = convertBtlPeg($transferOutSum, $brand_size, $brandListName['peg_size']);
                     $transfer_all_out = $alltransferOut['btl'] . "." . $alltransferOut['peg'];
 
-                    $allVariance = convertBtlPeg($varianceSum, $brand_size, $brandListName['peg_size']);
-                    $allVarianceSize = $allVariance['btl'] . "." . $allVariance['peg'];
-
                     $arr = [
                         'Type' => '',
                         'name' => 'SUBTOTAL',
@@ -3117,7 +3111,7 @@ class Api extends Controller
                         'transfer_out' => $transfer_all_out,
                         'closing' => $closing_all,
                         'physical' => $physical_all,
-                        'variance' => $allVarianceSize,
+                        'variance' => floatval($physical_all) - floatval($closing_all),
                         'total_consumption' => $ConsumptionSUM['btl'] . "." . $ConsumptionSUM['peg'],
                         'consumption' => $btl_comsumption_all . "." . $peg_comsumption_all,
                         'selling_variance' => $selling_variance,
@@ -3151,29 +3145,33 @@ class Api extends Controller
             $data['brand_id'] = $item;
             $brandSize = Brand::select('btl_size', 'category_id')->where('id', $data['brand_id'])->get()->first();
             $MlSize = ($brandSize['btl_size'] * $nobtl[$key]);
-            $data['qty'] = $MlSize;
-            $data['btl'] = $nobtl[$key];
-            $data['date'] = date('Y-m-d', strtotime($request->date));
-            $Transaction = new Transaction($data);
-            if ($Transaction->save()) {
-                if (Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize)) {
-                    // add item in stocks of receiver company
-                    $stockNum = Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->get()->count();
+            if (Stock::where(['company_id' => $data['company_id'], 'brand_id' => $data['brand_id'], ['qty', '>', $MlSize]])->get()->count() > 0) {
+                $data['qty'] = $MlSize;
+                $data['btl'] = $nobtl[$key];
+                $data['date'] = date('Y-m-d', strtotime($request->date));
+                $Transaction = new Transaction($data);
+                if ($Transaction->save()) {
+                    if (Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize)) {
+                        // add item in stocks of receiver company
+                        $stockNum = Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->get()->count();
 
-                    if ($stockNum > 0)
-                        Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize); // if item already exist in store
-                    else {
-                        // if item is new in store
-                        $data['company_id'] = $request->company_to_id;
-                        $data['category_id'] = $brandSize['category_id'];
-                        $data['brand_id'] = $data['brand_id'];
-                        $data['qty'] = $MlSize;
-                        $manage_stock = new Stock($data);
-                        $manage_stock->save();
+                        if ($stockNum > 0)
+                            Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize); // if item already exist in store
+                        else {
+                            // if item is new in store
+                            $data['company_id'] = $request->company_to_id;
+                            $data['category_id'] = $brandSize['category_id'];
+                            $data['brand_id'] = $data['brand_id'];
+                            $data['qty'] = $MlSize;
+                            $manage_stock = new Stock($data);
+                            $manage_stock->save();
+                        }
                     }
+                    $saved = true;
+                    $counter++;
+                } else {
+                    $skipped++;
                 }
-                $saved = true;
-                $counter++;
             } else {
                 $skipped++;
             }
@@ -3193,7 +3191,7 @@ class Api extends Controller
             ], 201);
         }
         return response()->json([
-            'message' => 'Oops! Operation failed',
+            'message' => 'Oops! Operation failed Or Stock unavailable',
             'type' => 'failed'
         ], 401);
     }
