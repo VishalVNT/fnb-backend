@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api;
+use App\Http\Controllers\Reports;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 /*
@@ -53,10 +54,10 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::get('/getTypeOptions', [Api::class, 'getTypeOptions']);
     Route::get('/getSales', [Api::class, 'getSales']);
     Route::get('/getRecipe', [Api::class, 'getRecipe']);
-    
-    
+
+
     //post methods
-    
+
     // new create or save Api
     Route::post('/getSupplierOptions', [Api::class, 'getSupplierOptions']);
     Route::post('/getSupplier', [Api::class, 'getSupplier']);
@@ -103,7 +104,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/recipeSales', [Api::class, 'recipeSales']);
     Route::post('/manage_stock', [Api::class, 'manage_stock']);
     Route::post('/getStockApi', [Api::class, 'getStockApi']);
-    Route::post('/BarVarianceReport', [Api::class, 'BarVarianceReport']);
+    Route::post('/BarVarianceReport', [Reports::class, 'BarVarianceReport']);
     Route::post('/BarVarianceReportMl', [Api::class, 'BarVarianceReportMl']);
     Route::post('/recipeFetchApi', [Api::class, 'recipeFetchApi']);
     Route::post('/getMenuOptions', [Api::class, 'getMenuOptions']);
