@@ -2654,7 +2654,7 @@ class Api extends Controller
     }
     public function dashboard(Request $request)
     {
-        $data = Sales::select(DB::raw('sum(sale_price) as sale_price'), DB::raw('date(sale_date) as date'))->where(['company_id' => $request->company_id, 'status' => 1])->whereRaw('created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)')->groupBy('created_at')->orderBy('created_at', 'ASC')->get();
+        $data = Sales::select(DB::raw('sum(sale_price) as sale_price'), DB::raw('date(sale_date) as date'))->where(['company_id' => $request->company_id, 'status' => 1])->whereRaw('sale_date > DATE_SUB(NOW(), INTERVAL 30 DAY)')->groupBy('sale_date')->orderBy('sale_date', 'ASC')->get();
         $sale = [];
         $date = [];
         foreach ($data as $row) {
