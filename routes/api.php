@@ -151,6 +151,6 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/dashboard', [Api::class, 'dashboard']);
 
     // reports api
-    Route::post('/BarVarianceReport', [Api::class, 'BarVarianceReport']);
-    Route::post('/BarVarianceSummaryReport', [Api::class, 'BarVarianceSummaryReport']);
+    Route::post('/BarVarianceReport', [Reports::class, 'BarVarianceReport']);
+    Route::post('/BarVarianceSummaryReport', [Reports::class, 'BarVarianceSummaryReport']);
 });
