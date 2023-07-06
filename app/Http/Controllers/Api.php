@@ -2840,4 +2840,53 @@ class Api extends Controller
             ]);
         }
     }
-}
+
+    public function BarVarianceSummaryReport(Request $request)
+    {
+        $json = [];
+        $comArray = [];
+        array_push($comArray, $request->company_id);
+        $brands_data = DB::table("brands")
+            ->select('id')
+            ->get();
+
+        $brandTotals = [];
+        $cosTotal = [];
+        $purchaseTotal = [];
+        $opening_total = [];  //$opening_qty
+
+        foreach ($brands_data as  $brandList) {
+            $brnad_id = $brandList->id;
+            [$data_daily_opening] = DB::table('daily_openings')
+                ->select(DB::raw('SUM(qty) AS qty'))
+                ->whereIn('company_id', $comArray)
+                ->where('brand_id', $brnad_id)
+                ->whereBetween('date', [$request->from_date, $request->to_date])
+                ->get();
+            $opening_qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
+
+            [$balance] = DB::table('purchases')
+                ->select(DB::raw('SUM(qty) AS qty'))
+                ->where('brand_id', $brnad_id)
+                ->whereIn('company_id', $comArray)
+                ->whereBetween('invoice_date', [$request->from_date, $request->to_date])
+                ->get();
+            $purchase_qty = !empty($balance->qty) ? $balance->qty : 0;
+
+            $total = $opening_qty + $purchase_qty;
+
+            [$stock] = DB::table('stocks')
+                ->select(DB::raw('COALESCE(SUM(cost_price), 0) as cost_price'))
+                ->whereIn('company_id', $comArray)
+                ->where('brand_id', $brnad_id)
+                ->whereBetween('created_at', [$request->from_date, $request->to_date])
+                ->get();
+            $purchase_price =  !empty($stock->cost_price) ? $stock->cost_price : 0;
+
+            //print_r($purchase_price);exit;
+
+            if (isset($purchaseTotal['purchase'])) {
+                $purchaseTotal['purchase'] += $purchase_price;
+            } else {
+                $purchaseTotal['purchase'] = $purchase_price;
+            }
