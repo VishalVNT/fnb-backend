@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\DailyOpening;
 use App\Models\LinkCompany;
 use App\Models\physical_history;
+use App\Models\purchase;
+use App\Models\Sales;
 use App\Models\Stock;
 use App\Models\Subcategory;
 use Illuminate\Http\Request;
@@ -196,7 +199,7 @@ class Reports extends Controller
 
                     //bcocktail
                     $c_cocktail_sales = convertBtlPeg($cocktail_sales, $brand_size, $brandListName['peg_size']);
-                    $arr['cocktail_sales'] = $c_cocktail_sales . "." . $c_cocktail_sales;
+                    $arr['cocktail_sales'] = $c_cocktail_sales['btl'] . "." . $c_cocktail_sales['peg'];
 
                     //banquet
                     $c_banquet_sales = convertBtlPeg($banquet_sales, $brand_size, $brandListName['peg_size']);
@@ -204,7 +207,7 @@ class Reports extends Controller
 
                     //banquet
                     $c_spoilage_sales = convertBtlPeg($spoilage_sales, $brand_size, $brandListName['peg_size']);
-                    $arr['spoilage_sales'] = $c_spoilage_sales . "." . $c_spoilage_sales;
+                    $arr['spoilage_sales'] = $c_spoilage_sales['btl'] . "." . $c_spoilage_sales['peg'];
 
                     //transfer in btl peg calculation start
                     $transfer = convertBtlPeg($transferIn, $brand_size, $brandListName['peg_size']);
@@ -287,7 +290,7 @@ class Reports extends Controller
                     //physical                   
                     $physical_all = convertBtlPeg($physicalSum, $brand_size, $brandList->peg_size);
                     // variance
-                    $variance_all = convertBtlPeg(($physicalSum - $closingSum), $brand_size, $brandList->peg_size);
+                    $variance_all = convertBtlPeg(abs($physicalSum - $closingSum), $brand_size, $brandList->peg_size);
 
                     // TOTAL CONSUMPTION 
                     $ConsumptionSUM = convertBtlPeg($totalConsumtion, $brand_size, $brandListName['peg_size']);
@@ -315,7 +318,7 @@ class Reports extends Controller
                         'transfer_out' => $alltransferOut['btl'] . "." . $alltransferOut['peg'],
                         'closing' =>  $closing_all['btl'] . "." . $closing_all['peg'],
                         'physical' =>  $physical_all['btl'] . "." . $physical_all['peg'],
-                        'variance' => $variance_all['btl'] . "." . $variance_all['peg'],
+                        'variance' => ($physicalSum - $closingSum) < 0 ? '-' . $variance_all['btl'] . "." . $variance_all['peg'] : $variance_all['btl'] . "." . $variance_all['peg'],
                         'total_consumption' =>  $ConsumptionSUM['btl'] . "." . $ConsumptionSUM['peg'],
                         'consumption' => $comsumption_all['btl'] . "." . $comsumption_all['peg'],
                         'selling_variance' => $selling_variance,
@@ -328,8 +331,6 @@ class Reports extends Controller
                 }
             }
         }
-
-        // linked companies loop end here
         return json_encode($json);
     }
 
@@ -398,19 +399,11 @@ class Reports extends Controller
                 ->whereDate('sale_date', '<=', $request->to_date)
                 ->get();
             $sale_qty =  !empty($salesStocks->saleQty) ? $salesStocks->saleQty : 0;
-
-
-
             $total_qty = $opening_stock + $purchase_qty;
-
             $consumption = $total_qty - $physical_qty;
-
             $cost_of_consumption = $purchase_price * $consumption;
-
             $liquor += $cost_of_consumption; // Add the cost_of_consumption to the liquor variable
-
             $total_costConsumption =  $cost_beverage +  $liquor;
-
             $closing =  $total_qty - $sale_qty;
 
             $variance = $physical_qty - $closing;
@@ -428,24 +421,6 @@ class Reports extends Controller
             $excess_total = $excess + $excess_beverage;
             $adjusted_variance = $shortage - $excess;
             $total_adjusted_variance = $adjusted_variance + $adjusted_beverage;
-
-
-
-            /* $arr['Test Data'] = [
-				 'brand_id' => $brand_id,
-				'opening_stock' => $opening_stock,
-				'purchase_qty' => $purchase_qty,
-				'total' => $total_qty,
-				'physical_qty' => $physical_qty, 
-				'consumption'=> $consumption,
-				'purchase_price'=> $purchase_price,
-				'cost_of_consumption' => $cost_of_consumption,
-				 'sale_qty' =>  $sale_qty,
-				 'closing' =>  $closing,
-				 'variance' =>  $variance
-				 
-    		]; 
-			array_push($json, $arr);*/
         } //end of foreach
 
         $arr['Net Sales Revenue'] = [
@@ -754,5 +729,89 @@ class Reports extends Controller
 
         array_push($json, $arr);
         return json_encode($json);
+    }
+    public function MonthlyReport(Request $request)
+    {
+        $json = [];
+        $data = [];
+
+        $data['opening']['Title'] = 'Opening';
+        $data['purchase']['Title'] = 'Purchase';
+        $data['total']['Title'] = 'total';
+        $data['sale']['Title'] = 'sales';
+        $data['closing']['Title'] = 'closing';
+
+        // $fromDate = $request->fromDate;
+        // $toDate = $request->toDate;
+        $company_id = $request->company_id;
+        $categories = Category::where(['status' => 1])->get(); // get all category
+        foreach ($categories as $key => $category) {
+            $btls = Brand::where(['category_id' => $category->id])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))->get(); // get unique bottle size of that category
+            foreach ($btls as $key2 => $btl_size) {
+                $brands = Brand::where(['category_id' => $category['id'], 'btl_size' => $btl_size['btl_size']])->get(); // get brand of that category
+                $openSum = 0;
+                $purchaseSum = 0;
+                $totalSum = 0;
+                $saleSum = 0;
+                $closingSum = 0;
+                foreach ($brands as $key => $brand) {
+                    // opening section
+                    $opening = DailyOpening::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                        ->select(DB::raw('COALESCE(qty, 0) as qty'))
+                        ->first();
+                    if ($opening)
+                        $open = $opening['qty'];
+                    else
+                        $open = 0;
+                    $openSum = $openSum + $open;
+                    //purchase section
+                    $purchase = purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                        ->select(DB::raw('COALESCE(qty, 0) as qty'))
+                        ->first();
+                    if ($purchase)
+                        $purchaseQty = $purchase['qty'];
+                    else
+                        $purchaseQty = 0;
+                    $purchaseSum = $purchaseSum + $purchaseQty;
+                    //total section
+                    $total = $purchaseQty + $open;
+                    if ($total)
+                        $totalSum = $totalSum + $total;
+
+                    // sales
+                    $sales = Sales::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                        ->select(DB::raw('COALESCE(qty, 0) as qty'))
+                        ->first();
+                    if ($sales)
+                        $saleQty = $sales['qty'];
+                    else
+                        $saleQty = 0;
+                    $saleSum = $saleSum + $saleQty;
+
+                    //total section
+                    $closing = $total - $saleQty;
+                    if ($total)
+                        $closingSum = $closingSum + $closing;
+                }
+                //conversion
+                $c_open = convertBtlPeg($openSum, $brand['btl_size'], $brand['peg_size']);
+                $c_purchase = convertBtlPeg($purchaseSum, $brand['btl_size'], $brand['peg_size']);
+                $c_total = convertBtlPeg($totalSum, $brand['btl_size'], $brand['peg_size']);
+                $c_sale = convertBtlPeg($saleSum, $brand['btl_size'], $brand['peg_size']);
+                $c_closing = convertBtlPeg($closingSum, $brand['btl_size'], $brand['peg_size']);
+
+                $data['opening'][$category['name'] . '-' . $brand['btl_size']] = $c_open['btl'] . '.' . $c_open['peg'];
+                $data['purchase'][$category['name'] . '-' . $brand['btl_size']] = $c_purchase['btl'] . '.' . $c_purchase['peg'];
+                $data['total'][$category['name'] . '-' . $brand['btl_size']] = $c_total['btl'] . '.' . $c_total['peg'];
+                $data['sale'][$category['name'] . '-' . $brand['btl_size']] = $c_sale['btl'] . '.' . $c_sale['peg'];
+                $data['closing'][$category['name'] . '-' . $brand['btl_size']] = $c_closing['btl'] . '.' . $c_closing['peg'];
+            }
+        }
+        array_push($json, $data['opening']);
+        array_push($json, $data['purchase']);
+        array_push($json, $data['total']);
+        array_push($json, $data['sale']);
+        array_push($json, $data['closing']);
+        return response()->json($json);
     }
 }
