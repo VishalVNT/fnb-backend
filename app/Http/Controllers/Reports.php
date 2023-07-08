@@ -684,8 +684,6 @@ class Reports extends Controller
     }
 
 
-
-
     public function SalesSummaryReport(Request $request)
     {
         $json = [];
@@ -812,6 +810,82 @@ class Reports extends Controller
         array_push($json, $data['total']);
         array_push($json, $data['sale']);
         array_push($json, $data['closing']);
+        return response()->json($json);
+    }
+    public function YearlyReport(Request $request)
+    {
+        $json = [];
+        $months = array();
+        $company_id = $request->company_id;
+        for ($month = 4; $month <= 12; $month++) {
+            $monthName = date("m-Y", mktime(0, 0, 0, $month, 1));
+            $months[] = $monthName;
+        }
+        foreach ($months as $month) {
+            $categories = Category::where('status', 1)->get();
+            foreach ($categories as $category) {
+                $btls = Brand::where(['category_id' => $category->id])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))->get(); // get unique bottle size of that category
+                foreach ($btls as $key2 => $btl_size) {
+                    $brands = Brand::where(['category_id' => $category['id'], 'btl_size' => $btl_size['btl_size']])->get(); // get brand of that category
+                    $openSum = 0;
+                    $purchaseSum = 0;
+                    $totalSum = 0;
+                    $saleSum = 0;
+                    $closingSum = 0;
+                    foreach ($brands as $key => $brand) {
+                        // opening section
+                        $opening = DailyOpening::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                            ->select(DB::raw('COALESCE(qty, 0) as qty'))
+                            ->first();
+                        if ($opening)
+                            $open = $opening['qty'];
+                        else
+                            $open = 0;
+                        $openSum = $openSum + $open;
+                        //purchase section
+                        $purchase = purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                            ->select(DB::raw('COALESCE(qty, 0) as qty'))
+                            ->first();
+                        if ($purchase)
+                            $purchaseQty = $purchase['qty'];
+                        else
+                            $purchaseQty = 0;
+                        $purchaseSum = $purchaseSum + $purchaseQty;
+                        //total section
+                        $total = $purchaseQty + $open;
+                        if ($total)
+                            $totalSum = $totalSum + $total;
+
+                        // sales
+                        $sales = Sales::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                            ->select(DB::raw('COALESCE(qty, 0) as qty'))
+                            ->first();
+                        if ($sales)
+                            $saleQty = $sales['qty'];
+                        else
+                            $saleQty = 0;
+                        $saleSum = $saleSum + $saleQty;
+
+                        //total section
+                        $closing = $total - $saleQty;
+                        if ($total)
+                            $closingSum = $closingSum + $closing;
+                    }
+                    //conversion
+                    $c_open = convertBtlPeg($openSum, $brand['btl_size'], $brand['peg_size']);
+                    $c_purchase = convertBtlPeg($purchaseSum, $brand['btl_size'], $brand['peg_size']);
+                    $c_sale = convertBtlPeg($saleSum, $brand['btl_size'], $brand['peg_size']);
+                    $c_closing = convertBtlPeg($closingSum, $brand['btl_size'], $brand['peg_size']);
+
+                    $data[$month]['Title'] = $month;
+                    $data[$month][$category['name'] . '-' . 'opening'] = $c_open['btl'] . '.' . $c_open['peg'];
+                    $data[$month][$category['name'] . '-' . 'purchase'] = $c_purchase['btl'] . '.' . $c_purchase['peg'];
+                    $data[$month][$category['name'] . '-' . 'sale'] = $c_sale['btl'] . '.' . $c_sale['peg'];
+                    $data[$month][$category['name'] . '-' . 'closing'] = $c_closing['btl'] . '.' . $c_closing['peg'];
+                }
+            }
+            array_push($json, $data[$month]);
+        }
         return response()->json($json);
     }
 }
