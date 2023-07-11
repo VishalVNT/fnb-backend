@@ -1445,4 +1445,178 @@ class Reports extends Controller
 
         return $months;
     }
+    public function BrandwiseReport(Request $request)
+    {
+        $json = [];
+        $data = [];
+        $subtotals = [];
+        $categories = Category::where(['status' => 1])->get();
+        $company_id = $request->company_id;
+        $currentDate = $request->to_date;
+
+        // Retrieve all unique btl_size values from the Brand table
+        $btlSizes = Brand::distinct()->pluck('btl_size')->toArray();
+
+
+        foreach ($categories as $category) {
+            $cat_name = $category->name;
+            $btls = Brand::where(['category_id' => $category->id])->get();
+            //total
+            $openSum = 0;
+            $open = 0;
+            $purchaseSum = 0;
+            $totalSum = 0;
+            $saleSum = 0;
+            $closingSum = 0;
+            foreach ($btls as $key2 => $brand) {
+                $brand_name = $brand['name'];
+                $btl_size = $brand['btl_size'];
+
+
+                // opening section
+                $opening = DailyOpening::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                    ->whereDate('date', $currentDate)
+                    ->select(DB::raw('COALESCE(qty, 0) as qty'))
+                    ->first();
+                if ($opening)
+                    $open = $opening['qty'];
+                else
+                    $open = 0;
+                $openSum = $openSum + $open;
+
+                // purchase section
+                $purchase = Purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                    ->whereDate('invoice_date', $currentDate)
+
+                    ->select(DB::raw('COALESCE(qty, 0) as qty'))
+                    ->first();
+                if ($purchase)
+                    $purchaseQty = $purchase['qty'];
+                else
+                    $purchaseQty = 0;
+                $purchaseSum = $purchaseSum + $purchaseQty;
+
+                $total = $purchaseQty + $open;
+                if ($total)
+                    $totalSum = $totalSum + $total;
+
+                // sales
+                $sales = Sales::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                    ->whereDate('sale_date', $currentDate)
+
+                    ->select(DB::raw('COALESCE(qty, 0) as qty'))
+                    ->first();
+                if ($sales)
+                    $saleQty = $sales['qty'];
+                else
+                    $saleQty = 0;
+                $saleSum = $saleSum + $saleQty;
+
+                // total section
+                $closing = $total - $saleQty;
+                if ($total)
+                    $closingSum = $closingSum + $closing;
+
+
+                $open_btl = convertBtlPeg($open, $brand['btl_size'], $brand['peg_size']);
+                // total calculation
+                $purchase_btl = convertBtlPeg($purchaseQty, $brand['btl_size'], $brand['peg_size']);
+                $sale_btl = convertBtlPeg($saleQty, $brand['btl_size'], $brand['peg_size']);
+                $closing_btl = convertBtlPeg($closing, $brand['btl_size'], $brand['peg_size']);
+
+                $categoryData = [
+                    'Category' => $cat_name,
+                    'Brand Name' => $brand_name,
+                    'TPNo' => '',
+                ];
+
+                // Add btl_size data to the categoryData array
+                foreach ($btlSizes as $size) {
+                    if ($size == $btl_size) {
+                        $categoryData['opening-' . $size] = $open_btl['btl'] . '.' . $open_btl['peg'];
+                    } else {
+                        $categoryData['opening-' . $size] = '';
+                    }
+                }
+                foreach ($btlSizes as $size) {
+                    if ($size == $btl_size) {
+                        $categoryData['purchase-' . $size] = $purchase_btl['btl'] . '.' . $purchase_btl['peg'];
+                    } else {
+                        $categoryData['purchase-' . $size] = '';
+                    }
+                }
+                foreach ($btlSizes as $size) {
+                    if ($size == $btl_size) {
+                        $categoryData['sales-' . $size] = $sale_btl['btl'] . '.' . $sale_btl['peg'];
+                    } else {
+                        $categoryData['sales-' . $size] = '';
+                    }
+                }
+                foreach ($btlSizes as $size) {
+                    if ($size == $btl_size) {
+                        $categoryData['closingstock-' . $size] = $closing_btl['btl'] . '.' . $closing_btl['peg'];
+                    } else {
+                        $categoryData['closingstock-' . $size] = '';
+                    }
+                }
+
+                $data[] = $categoryData;
+            }
+
+            // Calculate subtotals for each btl_size within the category
+            $categorySubtotal = [
+                'Category' => $cat_name,
+                'Brand Name' => 'SUBTOTAL',
+                'TPNo' => '',
+            ];
+
+            // total calculation
+            $c_open = convertBtlPeg($openSum, $brand['btl_size'], $brand['peg_size']);
+            $c_purchase = convertBtlPeg($purchaseSum, $brand['btl_size'], $brand['peg_size']);
+            $c_sale = convertBtlPeg($saleSum, $brand['btl_size'], $brand['peg_size']);
+            $c_closing = convertBtlPeg($closingSum, $brand['btl_size'], $brand['peg_size']);
+
+            $categoryData = [
+                'Category' => $cat_name,
+                'Brand Name' => $brand_name,
+                'TPNo' => '',
+            ];
+
+            // Add btl_size data to the categoryData array
+            foreach ($btlSizes as $size) {
+                if ($size == $btl_size) {
+                    $categorySubtotal['opening-' . $size] = $c_open['btl'] . '.' . $c_open['peg'];
+                } else {
+                    $categorySubtotal['opening-' . $size] = '';
+                }
+            }
+            foreach ($btlSizes as $size) {
+                if ($size == $btl_size) {
+                    $categorySubtotal['purchase-' . $size] = $c_purchase['btl'] . '.' . $c_purchase['peg'];
+                } else {
+                    $categorySubtotal['purchase-' . $size] = '';
+                }
+            }
+            foreach ($btlSizes as $size) {
+                if ($size == $btl_size) {
+                    $categorySubtotal['sales-' . $size] = $c_sale['btl'] . '.' . $c_sale['peg'];
+                } else {
+                    $categorySubtotal['sales-' . $size] = '';
+                }
+            }
+            foreach ($btlSizes as $size) {
+                if ($size == $btl_size) {
+                    $categorySubtotal['closingstock-' . $size] = $c_closing['btl'] . '.' . $c_closing['peg'];
+                } else {
+                    $categorySubtotal['closingstock-' . $size] = '';
+                }
+            }
+
+            $data[] = $categorySubtotal;
+        }
+
+        $json = $data;
+
+        return response()->json($json);
+    }
 }
