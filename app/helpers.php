@@ -2,6 +2,7 @@
 
 use App\Models\Brand;
 use App\Models\Log;
+use Illuminate\Support\Facades\DB;
 
 function SaveLog($data)
 {
@@ -47,11 +48,11 @@ function convertBtlPeg($qty, $brandSize, $peg_size)
 }
 function getrateamount($brand_id)
 {
-	$brandDetails = Brand::select('brands.btl_size', 'brands.peg_size', 'stocks.btl_selling_price', 'stocks.peg_selling_price')
+	$brandDetails = Brand::select('brands.btl_size', 'brands.peg_size', DB::raw('COALESCE(stocks.btl_selling_price,0) as btl_selling_price'), DB::raw('COALESCE(stocks.peg_selling_price,0) as peg_selling_price'))
 		->join('stocks', 'stocks.brand_id', '=', 'brands.id')
 		->where('brands.id', $brand_id)
 		->get();
-	if ($brandDetails) {
+	if (count($brandDetails) > 0) {
 		$btl_size = $brandDetails[0]['btl_size'];
 		$peg_size = $brandDetails[0]['peg_size'];
 		$btl_selling_price = $brandDetails[0]['btl_selling_price'];

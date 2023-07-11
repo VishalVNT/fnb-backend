@@ -154,11 +154,11 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/BarVarianceReport', [Reports::class, 'BarVarianceReport']);
     Route::post('/BarVarianceSummaryReport', [Reports::class, 'BarVarianceSummaryReport']);
     Route::post('/TPRegisterReport', [Reports::class, 'TPRegisterReport']);
-	Route::post('/SalesRegisterReport', [Reports::class, 'SalesRegisterReport']);
-	Route::post('/StockRegisterReport', [Reports::class, 'StockRegisterReport']);
-	Route::post('/SalesSummaryReport', [Reports::class, 'SalesSummaryReport']);
-	Route::post('/MonthlyReport', [Reports::class, 'MonthlyReport']);
-	Route::post('/BrandwiseReport', [Reports::class, 'BrandwiseReport']);
-	Route::post('/YearlyReport', [Reports::class, 'YearlyReport']);
-
+    Route::post('/SalesRegisterReport', [Reports::class, 'SalesRegisterReport']);
+    Route::post('/StockRegisterReport', [Reports::class, 'StockRegisterReport']);
+    Route::post('/SalesSummaryReport', [Reports::class, 'SalesSummaryReport']);
+    Route::post('/MonthlyReport', [Reports::class, 'MonthlyReport']);
+    Route::post('/BrandwiseReport', [Reports::class, 'BrandwiseReport']);
+    Route::post('/YearlyReport', [Reports::class, 'YearlyReport']);
+    Route::post('/YearlyComparison', [Reports::class, 'YearlyComparisonReport']);
 });
