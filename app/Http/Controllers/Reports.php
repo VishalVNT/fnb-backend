@@ -1462,6 +1462,10 @@ class Reports extends Controller
             $cat_name = $category->name;
             $btls = Brand::where(['category_id' => $category->id])->get();
             //total
+            $subtotalOpening = 0;
+            $subtotalPurchase = 0;
+            $subtotalSales     = 0;
+            $subtotalClosing = 0;
             $openSum = 0;
             $open = 0;
             $purchaseSum = 0;
