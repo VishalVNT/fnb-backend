@@ -735,11 +735,8 @@ class Reports extends Controller
 
                 $cat = array(
                     'category_name' => $name,
-                    //'brand_id' => '',
                     'brand_name' => '',
-                    //	'opening_qty' => '',
                     'btl_size' => '',
-                    //'peg_size' => '',
                     'opening_balance' => '',
                     'purchase' => '',
                     'total' => '',
@@ -749,21 +746,24 @@ class Reports extends Controller
 
 
                 [$data_daily_opening] = DB::table('daily_openings')
-                    ->select('qty')
+                    //->select('qty')
+                    ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
                     ->where('company_id', $company_id)
                     ->where('brand_id', $brandId)
                     ->get();
                 $opening_qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
 
                 $data_purchase = DB::table('purchases')
-                    ->select('qty')
+                    //->select('qty')
+                    ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
                     ->where('brand_id', $brandId)
                     ->where('company_id', $company_id)
                     ->first();
                 $purchase_qty = !empty($data_purchase->qty) ? $data_purchase->qty : 0;
 
                 $data_sales = DB::table('sales')
-                    ->select('qty')
+                    //->select('qty')
+                    ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
                     ->where('brand_id', $brandId)
                     ->where('company_id', $company_id)
                     ->first();
@@ -914,6 +914,14 @@ class Reports extends Controller
         $data = [];
         $from_date = $request->from_date;
         $to_date = $request->to_date;
+        
+         // Retrieve all unique btl_size values from the Brand table
+         //$btlSizes = Brand::distinct()->pluck('btl_size')->toArray();
+         $btlSizes = Brand::distinct()
+        ->orderBy('btl_size', 'DESC')
+        ->pluck('btl_size')
+        ->toArray();
+
 
         $categories = Category::where(['status' => 1])->get();
         foreach ($categories as $key => $category) {
@@ -926,6 +934,7 @@ class Reports extends Controller
                     ->where('brands.btl_size', '=', $btl_size->btl_size)
                     ->whereDate('purchases.invoice_date', '>=', $from_date)
                     ->whereDate('purchases.invoice_date', '<=', $to_date)
+                    ->orderBy('brands.btl_size', 'DESC')
                     ->get();
 
                 foreach ($brands as $key3 => $brand) {
@@ -936,10 +945,22 @@ class Reports extends Controller
                     if (!isset($data[$invoice_no])) {
                         $data[$invoice_no] = [];
                     }
-
-                    if (!isset($data[$invoice_no][$category->name . '-' . $btl_size])) {
-                        $data[$invoice_no][$category->name . '-' . $btl_size] = 0;
-                    }
+                    
+                    foreach ($btlSizes as $size) {
+                        
+                        if (!isset($data[$invoice_no][$category->name . '-' . $size])) {
+                            $data[$invoice_no][$category->name . '-' . $size] = 0;
+                        } 
+                   
+                    } 
+                    
+                  /*  foreach (array_reverse($btlSizes) as $size) {
+                        if (!isset($data[$invoice_no][$category->name . '-' . $size])) {
+                            $data[$invoice_no][$category->name . '-' . $size] = 0;
+                        }
+                    } */
+                    
+                    
 
                     $data[$invoice_no][$category->name . '-' . $btl_size] += $no_btl;
                 }
