@@ -346,7 +346,7 @@ class Reports extends Controller
             ->get();
 
         // Initialize the Liquor variable
-        $price = 0;
+
         $shortage = 0;
         $excess = 0;
         $cost_beverage = 0;
@@ -355,9 +355,14 @@ class Reports extends Controller
         $adjusted_beverage = 0;
         $adjusted_variance = 0;
         $consumption_sum = 0;
+        $ncSaleqty_beverage = 0;
+        $ideal = 0;
+        $gross = 0;
+        $net = 0;
+        $gross_beverage = 0;
+        $net_beverage = 0;
 
         // variables for current month
-        $price2 = 0;
         $shortage2 = 0;
         $excess2 = 0;
         $cost_beverage2 = 0;
@@ -366,6 +371,12 @@ class Reports extends Controller
         $adjusted_beverage2 = 0;
         $adjusted_variance2 = 0;
         $consumption_sum2 = 0;
+        $ncSaleqty_beverage2 = 0;
+        $ideal2 = 0;
+        $gross2 = 0;
+        $net2 = 0;
+        $gross_beverage2 = 0;
+        $net_beverage2 = 0;
 
 
         foreach ($brands_data as  $brandList) {
@@ -412,7 +423,7 @@ class Reports extends Controller
                 ->whereDate('sale_date', '>=', $request->from_date)
                 ->whereDate('sale_date', '<=', $request->to_date)
                 ->get();
-
+            $ncSaleqty = !empty($nc_sale->qty) ? $nc_sale->qty : '0';
             // CURRENT MONTH DATA
             [$data_daily_opening2] = DB::table('daily_openings')
                 ->select(DB::raw('SUM(qty) AS qty'))
@@ -457,6 +468,8 @@ class Reports extends Controller
                 ->whereDate('sale_date', '>=', $request->from_date)
                 ->whereDate('sale_date', '<=', $request->to_date)
                 ->get();
+            $ncSaleqty2 = !empty($nc_sale2->qty) ? $nc_sale2->qty : '0';
+
             $rate = getrateamount($brand_id); // rate of brand
             $total = $opening_stock + $purchase_qty;
             $closing =  $total - $salesStocks->saleQty;
@@ -469,12 +482,20 @@ class Reports extends Controller
             if ($variance < 0) {
                 $costing = $btl_sht['btl'] * $rate['amount'] + $btl_sht['peg'] * $rate['pegprice'];
                 $shortage += $costing;
-                $adjusted_variance += $costing - 0;
+                $adjusted = $costing - 0;
+                $adjusted_variance += $adjusted;
             } else {
                 $costing = $btl_sht['btl'] * $rate['amount'] + $btl_sht['peg'] * $rate['pegprice'];
                 $excess +=  $costing;
-                $adjusted_variance += 0 - $costing;
+                $adjusted = 0 - $costing;
+                $adjusted_variance += $adjusted;
             }
+            $idealPer = ($consumption_cost + $adjusted_variance) / $request->net_revenue;
+            $ideal += $idealPer;
+            $grossPer = ($consumption_cost + $ncSaleqty) / $request->net_revenue;
+            $gross += $grossPer;
+            $netPer = $consumption_cost / $request->net_revenue;
+            $net += $netPer;
             // MTD CALCULATION
             $total2 = $opening_stock2 + $purchase_qty2;
             $closing2 =  $total2 - $salesStocks2->saleQty;
@@ -493,6 +514,12 @@ class Reports extends Controller
                 $excess2 +=  $costing2;
                 $adjusted_variance2 += 0 - $costing2;
             }
+            $idealPer2 = ($consumption_cost2 + $adjusted_variance2) / $request->net_revenue2;
+            $ideal2 += $idealPer2;
+            $grossPer2 = ($consumption_cost2 + $ncSaleqty2) / $request->net_revenue2;
+            $gross2 += $grossPer2;
+            $netPer2 = $consumption_cost2 / $request->net_revenue2;
+            $net2 += $netPer2;
         } //end of foreach
 
         $sales = array(
@@ -545,6 +572,46 @@ class Reports extends Controller
             'MTD Total' => $adjusted_variance2 + $adjusted_beverage2,
         );
         array_push($json, $Adjusted);
+        $ncArr = array(
+            'Title' => 'NC Cost',
+            'Liquor' => $ncSaleqty,
+            'Beverage' => $ncSaleqty_beverage,
+            'Total' => $ncSaleqty + $ncSaleqty_beverage,
+            'MTD Liquor' => $ncSaleqty2,
+            'MTD Beverage' =>  $ncSaleqty_beverage2,
+            'MTD Total' => $ncSaleqty2 + $ncSaleqty2,
+        );
+        array_push($json, $ncArr);
+        $idealArr = array(
+            'Title' => 'Ideal Cost %',
+            'Liquor' => $ideal,
+            'Beverage' => $ncSaleqty_beverage,
+            'Total' => $ncSaleqty + $ncSaleqty_beverage,
+            'MTD Liquor' => $ideal2,
+            'MTD Beverage' =>  $ncSaleqty_beverage2,
+            'MTD Total' => $ncSaleqty2 + $ncSaleqty2,
+        );
+        array_push($json, $idealArr);
+        $grossArr = array(
+            'Title' => 'Gross Cost',
+            'Liquor' => $gross,
+            'Beverage' => $gross_beverage,
+            'Total' => $gross + $gross_beverage,
+            'MTD Liquor' => $gross2,
+            'MTD Beverage' =>  $gross_beverage2,
+            'MTD Total' => $gross2 + $gross_beverage2,
+        );
+        array_push($json, $grossArr);
+        $netArr = array(
+            'Title' => 'Net Cost',
+            'Liquor' => $net,
+            'Beverage' => $net_beverage,
+            'Total' => $net + $net_beverage,
+            'MTD Liquor' => $net2,
+            'MTD Beverage' =>  $net_beverage2,
+            'MTD Total' => $net2 + $net_beverage2,
+        );
+        array_push($json, $netArr);
         return json_encode($json);
     }
 
@@ -613,8 +680,6 @@ class Reports extends Controller
 
         return json_encode($json);
     }
-
-
 
     public function SalesRegisterReport(Request $request)
     {

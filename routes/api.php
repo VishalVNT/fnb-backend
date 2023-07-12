@@ -161,4 +161,5 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/BrandwiseReport', [Reports::class, 'BrandwiseReport']);
     Route::post('/YearlyReport', [Reports::class, 'YearlyReport']);
     Route::post('/YearlyComparison', [Reports::class, 'YearlyComparisonReport']);
+    Route::post('/DailyReport', [Reports::class, 'DailyReport']);
 });
