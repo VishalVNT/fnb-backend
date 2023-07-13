@@ -1127,14 +1127,6 @@ class Reports extends Controller
         $currentDate = $fromDate;
         while ($currentDate <= $toDate) {
             $data = [];
-
-            //    $data['date']['Title'] = $currentDate;
-            /*   $data['opening']['Title'] = 'Opening';
-        $data['purchase']['Title'] = 'Purchase';
-        $data['total']['Title'] = 'Total';
-        $data['sale']['Title'] = 'Sales';
-        $data['closing']['Title'] = 'Closing'; */
-
             $data['opening'][$currentDate] = 'Opening';
             $data['purchase'][$currentDate] = 'Purchase';
             $data['total'][$currentDate] = 'Total';
@@ -1172,17 +1164,6 @@ class Reports extends Controller
                         }
 
                         $openSum += $open;
-
-                        // Purchase section
-                        /* $purchase = Purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-                        ->whereDate('invoice_date', '=', $currentDate)
-                        ->select(DB::raw('COALESCE(qty, 0) as qty'), 'invoice_no')
-                        ->first(); */
-
-                        /* $purchase = Purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-					->whereDate('invoice_date', '=', $currentDate)
-					->select(DB::raw('COALESCE(qty, 0) as qty, GROUP_CONCAT(invoice_no SEPARATOR ",") as invoice_no'))
-					->first(); */
 
                         $purchase = Purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
                             ->whereDate('invoice_date', '=', $currentDate)

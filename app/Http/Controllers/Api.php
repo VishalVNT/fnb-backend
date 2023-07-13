@@ -1092,7 +1092,7 @@ class Api extends Controller
     // get supplier
     public function getSupplier(Request $request)
     {
-        $data = Supplier::where(['status' => 1, 'company_id' => $request->company_id])->get();
+        $data = Supplier::where(['status' => 1])->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -1105,7 +1105,7 @@ class Api extends Controller
     // get supplier
     public function getSupplierOptions(Request $request)
     {
-        $data = Supplier::select('id', 'name as label', 'name as value')->where(['status' => 1, 'company_id' => $request->company_id])->get();
+        $data = Supplier::select('id', 'name as label', 'name as value')->where(['status' => 1])->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -2134,7 +2134,7 @@ class Api extends Controller
             $btl = intval($dataArr['total']);
             $data['invoice_no'] = $dataArr['invoiceNo'];
             $data['invoice_date'] = date('Y-m-d', strtotime($dataArr['date']));
-            $supplier = Supplier::select('id')->where([['name', 'like', '%' . $dataArr['supplier'] . '%'], 'company_id' => $company_id])->get();
+            $supplier = Supplier::select('id')->where([['name', 'like', '%' . $dataArr['supplier'] . '%']])->get();
             if (empty($supplier[0]['id'])) {
                 array_push($failedData, $brandName);
                 $skipped++;
@@ -2840,5 +2840,4 @@ class Api extends Controller
             ]);
         }
     }
-    
 }
