@@ -238,6 +238,7 @@ class Api extends Controller
             'pincode' => 'required|string',
             'city' => 'required|string',
         ]);
+        $data['name'] = strtoupper($data['name']);
         $data['company_id'] = $request->company_id;
         $data['created_by'] = $request->user()->id;
         if (!empty($request->id)) {
@@ -300,6 +301,8 @@ class Api extends Controller
             'short_name' => 'required|string',
 
         ]);
+        $data['name'] = strtoupper($data['name']);
+        $data['short_name'] = strtoupper($data['short_name']);
         $data['created_by'] = $request->user()->id;
         $category = new Category($data);
         if ($category->save()) {
@@ -411,6 +414,8 @@ class Api extends Controller
         ]);
         $isSaved = false;
         if ($request->isUpdate == 1) {
+            $data['name'] = strtoupper($data['name']);
+            $data['short_name'] = strtoupper($data['short_name']);
             if (Brand::where('id', $request->id)->update($data))
                 $isSaved = true;
             $data_log = [
@@ -425,6 +430,7 @@ class Api extends Controller
             $data['category_id'] = $request->category_id;
             $data['subcategory_id'] = $request->type_id;
             $data['name'] = strtoupper($data['name']);
+            $data['short_name'] = strtoupper($data['short_name']);
             $data['created_by'] = $request->user()->id;
             $brand = new Brand($data);
             if ($brand->save())
@@ -1992,19 +1998,6 @@ class Api extends Controller
                     $data['physical_closing'] = $MlSize;
                     $data['cost_price'] = $dataArr['cost_price'];
                     $data['btl_selling_price'] = $dataArr['btl_selling_price'];
-                    $data['peg_selling_price'] = $dataArr['peg_selling_price'];
-                    // store stock
-                    $storeArr = explode('.', $dataArr['store']);
-                    $data['store_btl'] = $storeArr[0];
-                    $data['store_peg'] = !empty($storeArr[1]) ? $storeArr[1] : 0;
-                    // bar1 stock
-                    $storeArr1 = explode('.', $dataArr['bar1']);
-                    $data['bar1_btl'] = intval($storeArr1[0]);
-                    $data['bar1_peg'] = !empty($storeArr1[1]) ? $storeArr1[1] : 0;
-                    // bar2 stock
-                    $storeArr2 = explode('.', $dataArr['bar2']);
-                    $data['bar2_btl'] = $storeArr2[0];
-                    $data['bar2_peg'] = !empty($storeArr2[1]) ? $storeArr2[1] : 0;
                     //Stock entry
                     // $data['physical_closing'] = $MlSize;
                     $manage_stock = new Stock($data);
@@ -2072,14 +2065,27 @@ class Api extends Controller
                 $MlSize = ($brandSize[0]['btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
                 $data['category_id'] = $brandSize[0]['category_id'];
                 $data['brand_id'] = $brandSize[0]['id'];
+                $data['qty'] = $MlSize;
                 if ($count > 0) {
                     $data['physical_closing'] = $MlSize;
+                    // store stock
+                    $storeArr = explode('.', $dataArr['store']);
+                    $data['store_btl'] = $storeArr[0];
+                    $data['store_peg'] = !empty($storeArr[1]) ? $storeArr[1] : 0;
+                    // bar1 stock
+                    $storeArr1 = explode('.', $dataArr['bar1']);
+                    $data['bar1_btl'] = intval($storeArr1[0]);
+                    $data['bar1_peg'] = !empty($storeArr1[1]) ? $storeArr1[1] : 0;
+                    // bar2 stock
+                    $storeArr2 = explode('.', $dataArr['bar2']);
+                    $data['bar2_btl'] = $storeArr2[0];
+                    $data['bar2_peg'] = !empty($storeArr2[1]) ? $storeArr2[1] : 0;
                     Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->update($data);
 
                     $phy['company_id'] = $company_id;
                     $phy['brand_id'] = $brandSize[0]['id'];
-                    $phy['qty'] = $request->qty;
-                    $phy['date'] = date('Y-m-d');
+                    $phy['qty'] = $MlSize;
+                    $phy['date'] =  date('Y-m-d', strtotime($dataArr['date']));
                     $phy['status'] = 1;
                     $phy_save = new physical_history($phy);
                     $phy_save->save();
