@@ -593,6 +593,58 @@ class Api extends Controller
         }
     }
 
+    public function manage_opening(Request $request)
+    {
+        $brands = explode(',', $request->brand_id);
+        $no_btl = explode(',', $request->btl);
+        $no_peg = explode(',', $request->peg);
+        $isSaved = false;
+        $total = 0;
+        foreach ($brands as $key => $brand) {
+            $brandSize = Brand::select('btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
+            if (isset($brandSize)) {
+                $MlSize = ($brandSize[0]['btl_size'] * intval($no_btl[$key])) + ($brandSize[0]['peg_size'] * intval($no_peg[$key]));
+                $count = DailyOpening::where(['company_id' => $request->company_id,  'brand_id' => $brand])->get()->count();
+                if ($count > 0) {
+                    // update existing entry
+                    Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize]);
+                    // update daily opening
+                    DailyOpening::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize]);
+                    $isSaved = true;
+                    $total++;
+                } else {
+                    // add new stock
+                    $stock = new Stock(array(
+                        'company_id' => $request->company_id,
+                        'category_id' => $brandSize[0]['category_id'],
+                        'brand_id' => $brand,
+                        'qty' => $MlSize,
+                    ));
+                    if ($stock->save())
+                        $isSaved = true;
+                    //opening
+                    $opening['company_id'] = $request->company_id;
+                    $opening['brand_id'] = $brand;
+                    $opening['qty'] = $MlSize;
+                    $opening['date'] = date('Y-m-d', strtotime($request->openingDate));
+                    $saveOpening = new DailyOpening($opening);
+                    $saveOpening->save();
+                    $total++;
+                }
+            }
+        }
+        if (($isSaved)) {
+            return response()->json([
+                'message' => $total . ' Item opening added',
+                'type' => 'success'
+            ], 201);
+        } else {
+            return response()->json([
+                'message' => 'Oops! Operation failed',
+                'type' => 'failed'
+            ], 401);
+        }
+    }
     // create roles
     public function roles(Request $request)
     {
