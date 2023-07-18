@@ -567,8 +567,6 @@ class Api extends Controller
                 $saveOpening->save();
             }
         }
-
-
         $data_log = [
             'user_type' => $request->user()->type,
             'user_id' => $request->user()->id,
@@ -592,7 +590,7 @@ class Api extends Controller
             ], 401);
         }
     }
-
+    // manage opening
     public function manage_opening(Request $request)
     {
         $brands = explode(',', $request->brand_id);
@@ -629,6 +627,62 @@ class Api extends Controller
                     $opening['date'] = date('Y-m-d', strtotime($request->openingDate));
                     $saveOpening = new DailyOpening($opening);
                     $saveOpening->save();
+                    $total++;
+                }
+            }
+        }
+        if (($isSaved)) {
+            return response()->json([
+                'message' => $total . ' Item opening added',
+                'type' => 'success'
+            ], 201);
+        } else {
+            return response()->json([
+                'message' => 'Oops! Operation failed',
+                'type' => 'failed'
+            ], 401);
+        }
+    }
+    // manage physical
+    public function manage_physical(Request $request)
+    {
+        $brands = explode(',', $request->brand_id);
+        // store
+        $store_btl = explode(',', $request->store_btl);
+        $store_peg = explode(',', $request->store_peg);
+        // bar 1
+        $bar1_btl = explode(',', $request->bar1_btl);
+        $bar1_peg = explode(',', $request->bar1_peg);
+        // bar 2
+        $bar2_btl = explode(',', $request->bar2_btl);
+        $bar2_peg = explode(',', $request->bar2_peg);
+        $isSaved = false;
+        $total = 0;
+        foreach ($brands as $key => $brand) {
+            $no_btl = $store_btl[$key] + $bar1_btl[$key] + $bar2_btl[$key];
+            $no_peg = $store_peg[$key] + $bar1_peg[$key] + $bar2_peg[$key];
+            $brandSize = Brand::select('btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
+            if (isset($brandSize)) {
+                $MlSize = ($brandSize[0]['btl_size'] * intval($no_btl)) + ($brandSize[0]['peg_size'] * intval($no_peg));
+                $count = physical_history::where(['company_id' => $request->company_id,  'brand_id' => $brand])->whereDate('date', '=', $request->physicalDate)->get()->count();
+                if ($count == 0) {
+                    $phy['company_id'] = $request->company_id;
+                    $phy['brand_id'] = $brand;
+                    $phy['qty'] = $MlSize;
+                    $phy['date'] = date('Y-m-d', strtotime($request->physicalDate));
+                    $phy['status'] = 1;
+                    $phy_save = new physical_history($phy);
+                    if ($phy_save->save()) {
+                        $opening['company_id'] = $request->company_id;
+                        $opening['brand_id'] = $brand;
+                        $opening['qty'] = $MlSize;
+                        $opening['date'] = date('Y-m-d', strtotime($request->physicalDate . '+1 day'));
+                        $saveOpening = new DailyOpening($opening);
+                        $saveOpening->save();
+                    }
+                    // update existing entry
+                    Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize, 'physical_closing' => $MlSize]);
+                    $isSaved = true;
                     $total++;
                 }
             }

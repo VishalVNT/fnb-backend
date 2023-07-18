@@ -165,4 +165,5 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     
     // stock
     Route::post('/manage_opening', [Api::class, 'manage_opening']); 
+    Route::post('/manage_physical', [Api::class, 'manage_physical']); 
 });
