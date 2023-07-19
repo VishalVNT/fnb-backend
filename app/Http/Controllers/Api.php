@@ -659,11 +659,12 @@ class Api extends Controller
         $isSaved = false;
         $total = 0;
         foreach ($brands as $key => $brand) {
-            $no_btl = $store_btl[$key] + $bar1_btl[$key] + $bar2_btl[$key];
-            $no_peg = $store_peg[$key] + $bar1_peg[$key] + $bar2_peg[$key];
             $brandSize = Brand::select('btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
             if (isset($brandSize)) {
-                $MlSize = ($brandSize[0]['btl_size'] * intval($no_btl)) + ($brandSize[0]['peg_size'] * intval($no_peg));
+                $MlStore = ($brandSize[0]['btl_size'] * intval($store_btl[$key])) + ($brandSize[0]['peg_size'] * intval($store_peg[$key]));
+                $MlBar1 = ($brandSize[0]['btl_size'] * intval($bar1_btl[$key])) + ($brandSize[0]['peg_size'] * intval($bar1_peg[$key]));
+                $MlBar2 = ($brandSize[0]['btl_size'] * intval($bar2_btl[$key])) + ($brandSize[0]['peg_size'] * intval($bar2_peg[$key]));
+                $MlSize = $MlStore + $MlBar1 + $MlBar2;
                 $count = physical_history::where(['company_id' => $request->company_id,  'brand_id' => $brand])->whereDate('date', '=', $request->physicalDate)->get()->count();
                 if ($count == 0) {
                     $phy['company_id'] = $request->company_id;
