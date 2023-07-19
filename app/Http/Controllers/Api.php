@@ -47,9 +47,11 @@ class Api extends Controller
                 'type' => 'failed'
             ], 401);
         }
+        $data['company_id'] = $request->company_id ? $request->company_id : 0;
         $data['roles'] = json_encode($request->roles);
         $data['password'] = bcrypt($data['password']);
-        $data['type'] = 1; // type admin
+        $data['type'] = $request->type; // type client
+        $data['created_by'] = $request->user()->id;
         $admin = new User($data);
         if ($admin->save()) {
             return response()->json([

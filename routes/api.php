@@ -24,9 +24,10 @@ Route::get('/', function () {
 
 Route::post('/login', [Api::class, 'login']);
 Route::post('/test', [Api::class, 'test']);
-Route::post('/register', [Api::class, 'register']);
+
 
 Route::group(['middleware' => ('auth:sanctum')], function () {
+    Route::post('/register', [Api::class, 'register']);
     //get methods
     Route::post('/logout', function (Request $request) {
         if ($request->user()->currentAccessToken()->delete())
