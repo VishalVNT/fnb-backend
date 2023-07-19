@@ -21,7 +21,8 @@ return new class extends Migration
             $table->string('mobile',12);
             $table->integer('type')->comment("1:admin,0:user")->default(0);
             $table->string('email')->unique();
-            $table->string('roles')->nullable();
+            $table->string('read')->nullable();
+            $table->string('write')->nullable();
             $table->string('created_by')->default(0);
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');

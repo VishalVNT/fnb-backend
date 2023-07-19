@@ -48,7 +48,8 @@ class Api extends Controller
             ], 401);
         }
         $data['company_id'] = $request->company_id ? $request->company_id : 0;
-        $data['roles'] = json_encode($request->roles);
+        $data['read'] = json_encode($request->read);
+        $data['write'] = json_encode($request->write);
         $data['password'] = bcrypt($data['password']);
         $data['type'] = $request->type; // type client
         $data['created_by'] = $request->user()->id;
