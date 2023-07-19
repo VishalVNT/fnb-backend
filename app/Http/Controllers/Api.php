@@ -700,6 +700,34 @@ class Api extends Controller
             ], 401);
         }
     }
+    // manage physical
+    public function manage_price(Request $request)
+    {
+        $brands = explode(',', $request->brand_id);
+        $cost = explode(',', $request->cost);
+        $btl_sell = explode(',', $request->selling);
+        $isSaved = false;
+        $total = 0;
+        foreach ($brands as $key => $brand) {
+            $brandSize = Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->get()->count();
+            if ($brandSize > 0) {
+                // update existing entry
+                Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['cost_price' => $cost[$key], 'btl_selling_price' => $btl_sell[$key]]);
+                $isSaved = true;
+                $total++;
+            }
+        }
+        if (($isSaved)) {
+            return response()->json([
+                'message' => $total . ' Item opening added',
+                'type' => 'success'
+            ], 201);
+        }
+        return response()->json([
+            'message' => 'Oops! Operation failed',
+            'type' => 'failed'
+        ], 401);
+    }
     // create roles
     public function roles(Request $request)
     {
@@ -970,8 +998,6 @@ class Api extends Controller
             ], 401);
         }
     }
-
-
 
     // create child brand and link with parent
     public function linkBrands(Request $request)
@@ -2046,24 +2072,30 @@ class Api extends Controller
         ]);
         $response = [];
         $data = Stock::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get();
-        $qty = !empty($data[0]['qty']) ? $data[0]['qty'] : 0;
-        $openingData = DailyOpening::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->orderBy('id', 'DESC')->get()->first();
-        $openingQty = !empty($openingData['qty']) ? $openingData['qty'] : 0;
-        $result = getBtlPeg($req['brand_id'], $qty);
-        $opening = getBtlPeg($req['brand_id'], $openingQty);
-        if (empty($result['btl']) && empty($result['peg'])) {
-            $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $req['brand_id'])->get();
+        $brandSize = Brand::where('id', $req['brand_id'])->get();
+        if ($data) {
+            $qty = !empty($data[0]['qty']) ? $data[0]['qty'] : 0;
+            $openingData = DailyOpening::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->orderBy('id', 'DESC')->get()->first();
+            $openingQty = !empty($openingData['qty']) ? $openingData['qty'] : 0;
+            $result = getBtlPeg($req['brand_id'], $qty);
+            $opening = getBtlPeg($req['brand_id'], $openingQty);
+            if (empty($result['btl']) && empty($result['peg'])) {
+                array_push($response, array('btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size'], 'cost_price' => $data[0]['cost_price'], 'btl_selling_price' => $data[0]['btl_selling_price']));
+                return $response;
+            }
+            $data[0]['op_btl'] = $opening['btl'];
+            $data[0]['op_peg'] = intval($opening['peg']);
+            $data[0]['date'] = empty($openingData['date']) ? '' : $openingData['date'];
+
+            $data[0]['btl'] = $result['btl'];
+            $data[0]['peg'] = intval($result['peg']);
+            $data[0]['btl_size'] = $result['btl_size'];
+            $data[0]['peg_size'] = $result['peg_size'];
+        } else {
             array_push($response, array('btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size']));
             return $response;
         }
-        $data[0]['op_btl'] = $opening['btl'];
-        $data[0]['op_peg'] = intval($opening['peg']);
-        $data[0]['date'] = empty($openingData['date']) ? '' : $openingData['date'];
 
-        $data[0]['btl'] = $result['btl'];
-        $data[0]['peg'] = intval($result['peg']);
-        $data[0]['btl_size'] = $result['btl_size'];
-        $data[0]['peg_size'] = $result['peg_size'];
         if ($data) {
             return response()->json($data);
         } else {
