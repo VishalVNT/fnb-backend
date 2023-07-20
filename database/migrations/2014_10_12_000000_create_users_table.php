@@ -16,10 +16,9 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('company_id')->nullable();
-            $table->string('branch_id')->nullable();
             $table->string('name',100);
             $table->string('mobile',12);
-            $table->integer('type')->comment("1:admin,0:user")->default(0);
+            $table->integer('type')->comment("1:admin,0:client")->default(0);
             $table->string('email')->unique();
             $table->string('read')->nullable();
             $table->string('write')->nullable();

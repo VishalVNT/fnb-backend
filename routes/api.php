@@ -41,9 +41,6 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
                 'type' => 'failed'
             ]);
     });
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
     Route::get('/getCompanies', [Api::class, 'getCompanies']);
     Route::get('/getBranch', [Api::class, 'getBranch']);
     Route::get('/getUsers', [Api::class, 'getUsers']);
@@ -68,7 +65,6 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/getCompanyDetail', [Api::class, 'getCompanyDetail']);
     Route::post('/updateCompany', [Api::class, 'updateCompany']);
     Route::post('/branch', [Api::class, 'branch']);
-    Route::post('/user', [Api::class, 'user']);
     Route::post('/supplier', [Api::class, 'supplier']);
     Route::post('/category', [Api::class, 'category']);
     Route::post('/subcategory', [Api::class, 'subcategory']);
@@ -168,4 +164,8 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/manage_opening', [Api::class, 'manage_opening']); 
     Route::post('/manage_physical', [Api::class, 'manage_physical']); 
     Route::post('/manage_price', [Api::class, 'manage_price']); 
+    
+    // permission
+    Route::get('/getPermission', [Api::class, 'getPermission']); 
+
 });

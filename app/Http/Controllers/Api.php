@@ -132,6 +132,22 @@ class Api extends Controller
         }
     }
 
+    public function getPermission(Request $request)
+    {
+        $user = User::select('read', 'write', 'type', 'company_id')->where('id', $request->user()->id)->get()->first();
+        if ($user) {
+            if (!empty($user['company_id'])) {
+                $company_name = Company::select('name')->where('id', $user['company_id'])->get()->first();
+                $user['company_name'] = $company_name['name'];
+                return response()->json($user);
+            }
+            return response()->json($user);
+        }
+        return response()->json([
+            'message' => 'Oops! Operation failed',
+            'type' => 'failed'
+        ], 401);
+    }
     // create company
     public function company(Request $request)
     {
@@ -162,56 +178,6 @@ class Api extends Controller
 
                 return response()->json([
                     'message' => 'Company Added',
-                    'type' => 'success'
-                ], 201);
-            } else {
-                return response()->json([
-                    'message' => 'Oops! Operation failed',
-                    'type' => 'failed'
-                ], 401);
-            }
-        } else {
-            return response()->json([
-                'message' => 'Oops! Operation failed',
-                'type' => 'failed'
-            ], 401);
-        }
-    }
-    // create user
-    public function user(Request $request)
-    {
-        $data = $request->validate([
-            'company_id' => 'required|string',
-            // 'branch_id' => 'required|string',
-            'name' => 'required|string',
-            'mobile' => 'required|string',
-            'email' => 'required|string',
-            'roles' => 'required|string',
-            'password' => 'required|string',
-        ]);
-
-
-
-        /* $data = [
-            'password' 
-        ] = Hash::make($request->password);*/
-        $User = new User($data);
-        if ($User->save()) {
-
-            $data_log = [
-                'user_type' => $request->user()->type,
-                'user_id' => $request->user()->id,
-                'ip' => $request->ip(),
-                'log' => 'user created',
-                'platform' => 'web'
-            ];
-
-            $log_save = SaveLog($data_log);
-
-            if (($log_save)) {
-
-                return response()->json([
-                    'message' => 'User Added',
                     'type' => 'success'
                 ], 201);
             } else {
