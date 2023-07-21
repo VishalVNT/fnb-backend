@@ -49,7 +49,49 @@ class Api extends Controller
         }
         $data['company_id'] = $request->company_id ? $request->company_id : 0;
         $data['read'] = json_encode($request->read);
-        $data['write'] = json_encode($request->write);
+        $writeArr = [];
+        foreach ($request->read as $read) {
+            if ($read == 'company')
+                array_push($writeArr, "manage company");
+            if ($read == 'supplier')
+                array_push($writeArr, "manage supplier");
+            if ($read == 'brand')
+                array_push($writeArr, "manage brand");
+            if ($read == 'tp')
+                array_push($writeArr, "manage tp");
+            if ($read == 'sale')
+                array_push($writeArr, "manage sale");
+            if ($read == 'transfer')
+                array_push($writeArr, "Manage Transfer");
+            if ($read == 'menu master')
+                array_push($writeArr, "Manage Menu");
+            if ($read == 'stocks')
+                array_push($writeArr, "stocks");
+            if ($read == 'user')
+                array_push($writeArr, "Manage User");
+        }
+        // if the count of manage pages are 2 than user will get edit and delete option
+        foreach ($request->write as $write) {
+            if ($write == 'company')
+                array_push($writeArr, "create companies", "link companies", "manage company");
+            if ($write == 'supplier')
+                array_push($writeArr, "create supplier", "manage supplier");
+            if ($write == 'brand')
+                array_push($writeArr, "type master", "create brand", "manage brand");
+            if ($write == 'tp')
+                array_push($writeArr, "Tp entry", "manage tp");
+            if ($write == 'sale')
+                array_push($writeArr, "create sale", "manage sale");
+            if ($write == 'transfer')
+                array_push($writeArr, "Transfer Entry", "Manage Transfer");
+            if ($write == 'menu master')
+                array_push($writeArr, "Create Menu", "Manage Menu");
+            if ($write == 'stocks')
+                array_push($writeArr, "stocks");
+            if ($write == 'user')
+                array_push($writeArr, "Create User", "Manage User");
+        }
+        $data['write'] = json_encode($writeArr);
         $data['password'] = bcrypt($data['password']);
         $data['type'] = $request->type; // type client
         $data['created_by'] = $request->user()->id;
