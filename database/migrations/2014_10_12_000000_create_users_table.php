@@ -21,6 +21,7 @@ return new class extends Migration
             $table->integer('type')->comment("1:admin,0:client")->default(0);
             $table->string('email')->unique();
             $table->string('read')->nullable();
+            $table->string('write_module')->nullable();
             $table->string('write')->nullable();
             $table->string('created_by')->default(0);
             $table->timestamp('email_verified_at')->nullable();

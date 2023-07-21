@@ -49,6 +49,7 @@ class Api extends Controller
         }
         $data['company_id'] = $request->company_id ? $request->company_id : 0;
         $data['read'] = json_encode($request->read);
+        $data['write_module'] = json_encode($request->write);
         $writeArr = [];
         foreach ($request->read as $read) {
             if ($read == 'company')

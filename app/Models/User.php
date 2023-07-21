@@ -25,6 +25,7 @@ class User extends Authenticatable
         'mobile',
         'password',
 		'read',
+		'write_module',
 		'write',
 		'type',
 		'created_by',
