@@ -83,7 +83,7 @@ class Api extends Controller
                 if ($write == 'tp')
                     array_push($writeArr, "Tp entry", "manage tp");
                 if ($write == 'sales')
-                    array_push($writeArr, "sales", "manage sale");
+                    array_push($writeArr, "create sale", "manage sale");
                 if ($write == 'transfer')
                     array_push($writeArr, "Transfer Entry", "Manage Transfer");
                 if ($write == 'menu master')
@@ -98,7 +98,7 @@ class Api extends Controller
         } else {
             $data['read'] = json_encode(["tp", "sales", "transfer", "menu master", "stocks", "reports", "setting"]);
             // if the count of manage pages are 2 than user will get edit and delete option
-            $data['write'] = json_encode(["Tp entry", "manage tp", "sales", "manage sale", "Transfer Entry", "Manage Transfer", "Create Menu", "Manage Menu", "Stocks", "Report"]);
+            $data['write'] = json_encode(["Tp entry", "manage tp", "create sale", "manage sale", "Transfer Entry", "Manage Transfer", "Create Menu", "Manage Menu", "Stocks", "Report"]);
             $data['write_module'] = json_encode(["tp", "sales", "transfer", "menu master", "stocks", "reports", "setting"]);
         }
 
@@ -135,7 +135,53 @@ class Api extends Controller
                 'type' => 'failed'
             ], 401);
         }
-        $data['roles'] = json_encode($request->roles);
+        $writeArr = [];
+        if ($request->type == 1) {
+            $data['read'] = json_encode($request->read);
+            foreach ($request->read as $read) {
+                if ($read == 'company')
+                    array_push($writeArr, "manage company");
+                if ($read == 'supplier')
+                    array_push($writeArr, "manage supplier");
+                if ($read == 'brand')
+                    array_push($writeArr, "manage brand");
+                if ($read == 'tp')
+                    array_push($writeArr, "manage tp");
+                if ($read == 'sales')
+                    array_push($writeArr, "manage sale");
+                if ($read == 'transfer')
+                    array_push($writeArr, "Manage Transfer");
+                if ($read == 'menu master')
+                    array_push($writeArr, "Manage Menu");
+                if ($read == 'stocks')
+                    array_push($writeArr, "stocks");
+                if ($read == 'user')
+                    array_push($writeArr, "Manage User");
+            }
+            // if the count of manage pages are 2 than user will get edit and delete option
+            foreach ($request->write as $write) {
+                if ($write == 'company')
+                    array_push($writeArr, "create companies", "link companies", "manage company");
+                if ($write == 'supplier')
+                    array_push($writeArr, "create supplier", "manage supplier");
+                if ($write == 'brand')
+                    array_push($writeArr, "type master", "create brand", "manage brand");
+                if ($write == 'tp')
+                    array_push($writeArr, "Tp entry", "manage tp");
+                if ($write == 'sales')
+                    array_push($writeArr, "create sale", "manage sale");
+                if ($write == 'transfer')
+                    array_push($writeArr, "Transfer Entry", "Manage Transfer");
+                if ($write == 'menu master')
+                    array_push($writeArr, "Create Menu", "Manage Menu");
+                if ($write == 'stocks')
+                    array_push($writeArr, "stocks");
+                if ($write == 'user')
+                    array_push($writeArr, "Create User", "Manage User");
+            }
+            $data['write'] = json_encode($writeArr);
+            $data['write_module'] = json_encode($request->write);
+        }
         if (User::where(['id' => $request->id])->update($data)) {
             return response()->json([
                 'message' => 'Admin Updated',
@@ -1149,7 +1195,7 @@ class Api extends Controller
     }
     public function fetchUserId(Request $request)
     {
-        $data = User::select('id', 'name', 'mobile', 'email', 'roles')->where(['status' => 1, 'id' => $request->id])->get()->first();
+        $data = User::select('id', 'name', 'mobile', 'email', 'type', 'read', 'write', 'write_module')->where(['status' => 1, 'id' => $request->id])->get()->first();
         if ($data) {
             return response()->json($data);
         } else {
