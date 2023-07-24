@@ -61,6 +61,8 @@ class Api extends Controller
                     array_push($writeArr, "manage brand");
                 if ($read == 'tp')
                     array_push($writeArr, "manage tp");
+                if ($read == 'category')
+                    array_push($writeArr, "category");
                 if ($read == 'sales')
                     array_push($writeArr, "manage sale");
                 if ($read == 'transfer')
@@ -80,6 +82,8 @@ class Api extends Controller
                     array_push($writeArr, "create supplier", "manage supplier");
                 if ($write == 'brand')
                     array_push($writeArr, "type master", "create brand", "manage brand");
+                if ($write == 'category')
+                    array_push($writeArr, "category");
                 if ($write == 'tp')
                     array_push($writeArr, "Tp entry", "manage tp");
                 if ($write == 'sales')
