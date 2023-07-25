@@ -914,6 +914,7 @@ class Reports extends Controller
         $data = [];
         $from_date = $request->from_date;
         $to_date = $request->to_date;
+        $company_id = $request->company_id;
         
          // Retrieve all unique btl_size values from the Brand table
          //$btlSizes = Brand::distinct()->pluck('btl_size')->toArray();
@@ -931,6 +932,7 @@ class Reports extends Controller
                     ->join('purchases', 'purchases.brand_id', '=', 'brands.id')
                     ->select('brands.*', 'purchases.invoice_no', 'purchases.invoice_date', 'purchases.no_btl')
                     ->where('purchases.category_id', '=', $category->id)
+                    ->where('purchases.company_id', $company_id)
                     ->where('brands.btl_size', '=', $btl_size->btl_size)
                     ->whereDate('purchases.invoice_date', '>=', $from_date)
                     ->whereDate('purchases.invoice_date', '<=', $to_date)
@@ -938,35 +940,46 @@ class Reports extends Controller
                     ->get();
 
                 foreach ($brands as $key3 => $brand) {
+              
                     $btl_size =  $brand->btl_size;
                     $no_btl  =  $brand->no_btl;
                     $invoice_no = $brand->invoice_no;
+                    
+                   
+                    
 
                     if (!isset($data[$invoice_no])) {
                         $data[$invoice_no] = [];
                     }
                     
-                    foreach ($btlSizes as $size) {
+                    foreach ($categories as $cat)
+                    {
+                        foreach ($btlSizes as $size) {
+                        
+                            if (!isset($data[$invoice_no][$cat->name . '-' . $size])) {
+                                $data[$invoice_no][$cat->name . '-' . $size] = 0;
+                            } 
+                       
+                        } 
+                    }
+                    
+                    /* foreach ($btlSizes as $size) {
                         
                         if (!isset($data[$invoice_no][$category->name . '-' . $size])) {
                             $data[$invoice_no][$category->name . '-' . $size] = 0;
                         } 
                    
-                    } 
+                    }  */
                     
-                  /*  foreach (array_reverse($btlSizes) as $size) {
-                        if (!isset($data[$invoice_no][$category->name . '-' . $size])) {
-                            $data[$invoice_no][$category->name . '-' . $size] = 0;
-                        }
-                    } */
-                    
-                    
-
+                 
                     $data[$invoice_no][$category->name . '-' . $btl_size] += $no_btl;
+                  // $data[$invoice_no][$cat->name . '-' . $btl_size] += $no_btl;
                 }
+                
             }
+            
         }
-
+      
         $total = [];
         foreach ($data as $invoice_no => $values) {
             $entry = ['TP No.' => $invoice_no] + $values;
@@ -1474,11 +1487,23 @@ class Reports extends Controller
         $categories = Category::where(['status' => 1])->get();
         $company_id = $request->company_id;
         $currentDate = $request->to_date;
+        $pageno =  $request->pageno;
+        
 
         // Retrieve all unique btl_size values from the Brand table
-        $btlSizes = Brand::distinct()->pluck('btl_size')->toArray();
+       // $btlSizes = Brand::distinct()->pluck('btl_size')->toArray();
+       
+       $perPage = 6; // Number of records per page
+       $pageOffset = ($pageno - 1) * $perPage; // Calculate the offset based on the page number
+     
 
-
+        $btlSizes = Brand::distinct()
+            ->pluck('btl_size')
+            ->skip($pageOffset)
+            ->take($perPage)
+            ->toArray();
+        //print_r($btlSizes); exit;
+        
         foreach ($categories as $category) {
             $cat_name = $category->name;
             $btls = Brand::where(['category_id' => $category->id])->get();
@@ -1558,30 +1583,30 @@ class Reports extends Controller
                 // Add btl_size data to the categoryData array
                 foreach ($btlSizes as $size) {
                     if ($size == $btl_size) {
-                        $categoryData['opening-' . $size] = $open_btl['btl'] . '.' . $open_btl['peg'];
+                        $categoryData['o-' . $size] = $open_btl['btl'] . '.' . $open_btl['peg'];
                     } else {
-                        $categoryData['opening-' . $size] = '';
+                        $categoryData['o-' . $size] = '';
                     }
                 }
                 foreach ($btlSizes as $size) {
                     if ($size == $btl_size) {
-                        $categoryData['purchase-' . $size] = $purchase_btl['btl'] . '.' . $purchase_btl['peg'];
+                        $categoryData['p-' . $size] = $purchase_btl['btl'] . '.' . $purchase_btl['peg'];
                     } else {
-                        $categoryData['purchase-' . $size] = '';
+                        $categoryData['p-' . $size] = '';
                     }
                 }
                 foreach ($btlSizes as $size) {
                     if ($size == $btl_size) {
-                        $categoryData['sales-' . $size] = $sale_btl['btl'] . '.' . $sale_btl['peg'];
+                        $categoryData['s-' . $size] = $sale_btl['btl'] . '.' . $sale_btl['peg'];
                     } else {
-                        $categoryData['sales-' . $size] = '';
+                        $categoryData['s-' . $size] = '';
                     }
                 }
                 foreach ($btlSizes as $size) {
                     if ($size == $btl_size) {
-                        $categoryData['closingstock-' . $size] = $closing_btl['btl'] . '.' . $closing_btl['peg'];
+                        $categoryData['c-' . $size] = $closing_btl['btl'] . '.' . $closing_btl['peg'];
                     } else {
-                        $categoryData['closingstock-' . $size] = '';
+                        $categoryData['c-' . $size] = '';
                     }
                 }
 
@@ -1610,30 +1635,30 @@ class Reports extends Controller
             // Add btl_size data to the categoryData array
             foreach ($btlSizes as $size) {
                 if ($size == $btl_size) {
-                    $categorySubtotal['opening-' . $size] = $c_open['btl'] . '.' . $c_open['peg'];
+                    $categorySubtotal['o-' . $size] = $c_open['btl'] . '.' . $c_open['peg'];
                 } else {
-                    $categorySubtotal['opening-' . $size] = '';
+                    $categorySubtotal['o-' . $size] = '';
                 }
             }
             foreach ($btlSizes as $size) {
                 if ($size == $btl_size) {
-                    $categorySubtotal['purchase-' . $size] = $c_purchase['btl'] . '.' . $c_purchase['peg'];
+                    $categorySubtotal['p-' . $size] = $c_purchase['btl'] . '.' . $c_purchase['peg'];
                 } else {
-                    $categorySubtotal['purchase-' . $size] = '';
+                    $categorySubtotal['p-' . $size] = '';
                 }
             }
             foreach ($btlSizes as $size) {
                 if ($size == $btl_size) {
-                    $categorySubtotal['sales-' . $size] = $c_sale['btl'] . '.' . $c_sale['peg'];
+                    $categorySubtotal['s-' . $size] = $c_sale['btl'] . '.' . $c_sale['peg'];
                 } else {
-                    $categorySubtotal['sales-' . $size] = '';
+                    $categorySubtotal['s-' . $size] = '';
                 }
             }
             foreach ($btlSizes as $size) {
                 if ($size == $btl_size) {
-                    $categorySubtotal['closingstock-' . $size] = $c_closing['btl'] . '.' . $c_closing['peg'];
+                    $categorySubtotal['c-' . $size] = $c_closing['btl'] . '.' . $c_closing['peg'];
                 } else {
-                    $categorySubtotal['closingstock-' . $size] = '';
+                    $categorySubtotal['c-' . $size] = '';
                 }
             }
 
