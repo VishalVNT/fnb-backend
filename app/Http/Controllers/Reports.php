@@ -113,7 +113,8 @@ class Reports extends Controller
                         ->select(DB::raw('SUM(qty) AS qty'))
                         ->where('brand_id', $brandListName['id'])
                         ->whereIn('company_id', $comArray)
-                        ->whereBetween('invoice_date', [$request->from_date, $request->to_date])
+                        ->whereDate('invoice_date', '>=', $request->from_date)
+                        ->whereDate('invoice_date', '<=', $request->to_date)
                         ->get();
                     $balance = !empty($balance->qty) ? $balance->qty : 0;
                     $receiptSum = $receiptSum + $balance;
@@ -1495,7 +1496,6 @@ class Reports extends Controller
     {
         $json = [];
         $data = [];
-        $subtotals = [];
         $categories = Category::where(['status' => 1])->get();
         $company_id = $request->company_id;
         $currentDate = $request->to_date;
@@ -1508,10 +1508,6 @@ class Reports extends Controller
             $cat_name = $category->name;
             $btls = Brand::where(['category_id' => $category->id])->get();
             //total
-            $subtotalOpening = 0;
-            $subtotalPurchase = 0;
-            $subtotalSales     = 0;
-            $subtotalClosing = 0;
             $openSum = 0;
             $open = 0;
             $purchaseSum = 0;

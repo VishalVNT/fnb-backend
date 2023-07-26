@@ -159,13 +159,14 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/YearlyReport', [Reports::class, 'YearlyReport']);
     Route::post('/YearlyComparison', [Reports::class, 'YearlyComparisonReport']);
     Route::post('/DailyReport', [Reports::class, 'DailyReport']);
-    
-    // stock
-    Route::post('/manage_opening', [Api::class, 'manage_opening']); 
-    Route::post('/manage_physical', [Api::class, 'manage_physical']); 
-    Route::post('/manage_price', [Api::class, 'manage_price']); 
-    
-    // permission
-    Route::get('/getPermission', [Api::class, 'getPermission']); 
+    Route::post('/resetPassword', [Reports::class, 'resetPassword']);
+    Route::get('/downloadBrands', [Api::class, 'downloadBrands']);
 
+    // stock
+    Route::post('/manage_opening', [Api::class, 'manage_opening']);
+    Route::post('/manage_physical', [Api::class, 'manage_physical']);
+    Route::post('/manage_price', [Api::class, 'manage_price']);
+
+    // permission
+    Route::get('/getPermission', [Api::class, 'getPermission']);
 });
