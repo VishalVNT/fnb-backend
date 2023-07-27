@@ -916,8 +916,6 @@ class Reports extends Controller
         $to_date = $request->to_date;
         $company_id = $request->company_id;
         
-         // Retrieve all unique btl_size values from the Brand table
-         //$btlSizes = Brand::distinct()->pluck('btl_size')->toArray();
          $btlSizes = Brand::distinct()
         ->orderBy('btl_size', 'DESC')
         ->pluck('btl_size')
@@ -971,7 +969,6 @@ class Reports extends Controller
                    
                     }  */
                     
-                 
                     $data[$invoice_no][$category->name . '-' . $btl_size] += $no_btl;
                   // $data[$invoice_no][$cat->name . '-' . $btl_size] += $no_btl;
                 }

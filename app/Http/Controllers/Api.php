@@ -1374,12 +1374,22 @@ class Api extends Controller
     }
     public function purchase(Request $request)
     {
-        $data = $request->validate([
+       /* $data = $request->validate([
             'company_id' => 'required',
             'invoice_no' => Rule::unique('purchases')->where(function ($query) {
                 $query->where('status', 1);
             }),
+        ]); */
+        
+        $data = $request->validate([
+            'company_id' => 'required',
+            'vendor_id' => 'required',
+            'invoice_no' => Rule::unique('purchases')->where(function ($query) use ($request) {
+                $query->where('status', 1)->where('vendor_id', $request->vendor_id);
+            }),
         ]);
+        
+        
         $isSaved = false;
         $brand = explode(',', $request->brand_id);
         $nobtl = explode(',', $request->nobtl);
@@ -2490,7 +2500,8 @@ class Api extends Controller
     }
     public function ValidateTp(Request $request)
     {
-        $data = Purchase::where(['invoice_no' => $request->invoice_no, 'company_id' => $request->company_id, 'status' => 1])->get()->count();
+        //$data = Purchase::where(['invoice_no' => $request->invoice_no, 'company_id' => $request->company_id, 'status' => 1])->get()->count();
+       $data = Purchase::where(['invoice_no' => $request->invoice_no, 'company_id' => $request->company_id, 'status' => 1 , 'vendor_id' => $request->vendor_id])->get()->count();
         return response()->json($data);
     }
     public function recipeDetails(Request $request)
@@ -2642,7 +2653,7 @@ class Api extends Controller
     }
     public function fetchPurchaseData(Request $request)
     {
-        $data = Purchase::select('brands.name', 'purchases.*')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.invoice_no' => $request->id])->orderBy('id', 'DESC')->get();
+        $data = Purchase::select('brands.name', 'purchases.*')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.invoice_no' => $request->id , 'purchases.vendor_id' => $request->vendor_id])->orderBy('id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
