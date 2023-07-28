@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\DemoEmail;
 use DateTime;
 use App\Models\branch;
 use App\Models\Brand;
@@ -26,7 +25,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Throwable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
 class Api extends Controller
@@ -50,9 +48,9 @@ class Api extends Controller
             ], 401);
         }
         $data['company_id'] = $request->company_id ? $request->company_id : 0;
-
+        $data['read'] = json_encode($request->read);
+        $data['write_module'] = json_encode($request->write);
         $writeArr = [];
-<<<<<<< HEAD
         foreach ($request->read as $read) {
             if ($read == 'company')
                 array_push($writeArr, "manage company");
@@ -99,65 +97,6 @@ class Api extends Controller
                 array_push($writeArr, "Create User", "Manage User");
         }
         $data['write'] = json_encode($writeArr);
-=======
-        if ($request->type == 1) {
-            $data['read'] = json_encode($request->read);
-            foreach ($request->read as $read) {
-                if ($read == 'company')
-                    array_push($writeArr, "manage company");
-                if ($read == 'supplier')
-                    array_push($writeArr, "manage supplier");
-                if ($read == 'brand')
-                    array_push($writeArr, "manage brand");
-                if ($read == 'tp')
-                    array_push($writeArr, "manage tp");
-                if ($read == 'category')
-                    array_push($writeArr, "category");
-                if ($read == 'sales')
-                    array_push($writeArr, "manage sale");
-                if ($read == 'transfer')
-                    array_push($writeArr, "Manage Transfer");
-                if ($read == 'menu master')
-                    array_push($writeArr, "Manage Menu");
-                if ($read == 'stocks')
-                    array_push($writeArr, "stocks");
-                if ($read == 'user')
-                    array_push($writeArr, "Manage User");
-            }
-            // if the count of manage pages are 2 than user will get edit and delete option
-            foreach ($request->write as $write) {
-                if ($write == 'company')
-                    array_push($writeArr, "create companies", "link companies", "manage company");
-                if ($write == 'supplier')
-                    array_push($writeArr, "create supplier", "manage supplier");
-                if ($write == 'brand')
-                    array_push($writeArr, "type master", "create brand", "manage brand");
-                if ($write == 'category')
-                    array_push($writeArr, "category");
-                if ($write == 'tp')
-                    array_push($writeArr, "Tp entry", "manage tp");
-                if ($write == 'sales')
-                    array_push($writeArr, "create sale", "manage sale");
-                if ($write == 'transfer')
-                    array_push($writeArr, "Transfer Entry", "Manage Transfer");
-                if ($write == 'menu master')
-                    array_push($writeArr, "Create Menu", "Manage Menu");
-                if ($write == 'stocks')
-                    array_push($writeArr, "stocks");
-                if ($write == 'user')
-                    array_push($writeArr, "Create User", "Manage User");
-            }
-            $data['write'] = json_encode($writeArr);
-            $data['write_module'] = json_encode($request->write);
-        } else {
-            $data['read'] = json_encode(["tp", "sales", "transfer", "menu master", "stocks", "reports", "setting"]);
-            // if the count of manage pages are 2 than user will get edit and delete option
-            $data['write'] = json_encode(["Tp entry", "manage tp", "create sale", "manage sale", "Transfer Entry", "Manage Transfer", "Create Menu", "Manage Menu", "Stocks", "Report"]);
-            $data['write_module'] = json_encode(["tp", "sales", "transfer", "menu master", "stocks", "reports", "setting"]);
-        }
-
-
->>>>>>> 969589a657b28de3cc44620a09a754c0bd021505
         $data['password'] = bcrypt($data['password']);
         $data['type'] = $request->type; // type client
         $data['created_by'] = $request->user()->id;
@@ -3134,38 +3073,6 @@ class Api extends Controller
             ]);
         }
     }
-<<<<<<< HEAD
-=======
-    public function resetPassword(Request $request)
-    {
-        $data = $request->validate([
-            'email' => 'required'
-        ]);
-        $newPassword = rand(111111, 999999);
-        $user = User::where('email', $data['email'])->get()->count();
-        if ($user) {
-            User::where('email', $data['email'])->update(['password' => Hash::make($newPassword)]);
-            $data = [
-                'title' => 'New Login Password',
-                'body' => 'Dear User, Following is your new login password ' . $newPassword,
-            ];
-            Mail::to($data['email'])->send(new DemoEmail($data));
-            return response()->json([
-                'message' => 'New password sent on mail',
-                'type' => 'failed'
-            ]);
-        } else {
-            return response()->json([
-                'message' => 'Email Id Not Found',
-                'type' => 'failed'
-            ]);
-        }
-        return response()->json([
-            'message' => 'Oops! operation failed!',
-            'type' => 'failed'
-        ]);
-    }
->>>>>>> 969589a657b28de3cc44620a09a754c0bd021505
     public function downloadBrands()
     {
         $brands = Brand::select('name', 'btl_size', 'peg_size')->where(['status' => 1])->get();
