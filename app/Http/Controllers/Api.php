@@ -56,6 +56,8 @@ class Api extends Controller
                 array_push($writeArr, "manage company");
             if ($read == 'supplier')
                 array_push($writeArr, "manage supplier");
+            if ($read == 'category')
+                array_push($writeArr, "category");
             if ($read == 'brand')
                 array_push($writeArr, "manage brand");
             if ($read == 'tp')
@@ -77,6 +79,8 @@ class Api extends Controller
                 array_push($writeArr, "create companies", "link companies", "manage company");
             if ($write == 'supplier')
                 array_push($writeArr, "create supplier", "manage supplier");
+            if ($write == 'category')
+                array_push($writeArr, "category");
             if ($write == 'brand')
                 array_push($writeArr, "type master", "create brand", "manage brand");
             if ($write == 'tp')
@@ -125,7 +129,59 @@ class Api extends Controller
                 'type' => 'failed'
             ], 401);
         }
-        $data['roles'] = json_encode($request->roles);
+        $writeArr = [];
+        if ($request->type == 1) {
+            $data['read'] = json_encode($request->read);
+            foreach ($request->read as $read) {
+                if ($read == 'company')
+                    array_push($writeArr, "manage company");
+                if ($read == 'supplier')
+                    array_push($writeArr, "manage supplier");
+                if ($read == 'brand')
+                    array_push($writeArr, "manage brand");
+                if ($read == 'tp')
+                    array_push($writeArr, "manage tp");
+                if ($read == 'category')
+                    array_push($writeArr, "category");
+                if ($read == 'sales')
+                    array_push($writeArr, "manage sale");
+                if ($read == 'transfer')
+                    array_push($writeArr, "Manage Transfer");
+                if ($read == 'menu master')
+                    array_push($writeArr, "Manage Menu");
+                if ($read == 'stocks')
+                    array_push($writeArr, "stocks");
+                if ($read == 'reports')
+                    array_push($writeArr, "reports", "flr");
+                if ($read == 'user')
+                    array_push($writeArr, "Manage User");
+            }
+            // if the count of manage pages are 2 than user will get edit and delete option
+            foreach ($request->write as $write) {
+                if ($write == 'company')
+                    array_push($writeArr, "create companies", "link companies", "manage company");
+                if ($write == 'supplier')
+                    array_push($writeArr, "create supplier", "manage supplier");
+                if ($write == 'brand')
+                    array_push($writeArr, "type master", "create brand", "manage brand");
+                if ($write == 'category')
+                    array_push($writeArr, "category");
+                if ($write == 'tp')
+                    array_push($writeArr, "Tp entry", "manage tp");
+                if ($write == 'sales')
+                    array_push($writeArr, "create sale", "manage sale");
+                if ($write == 'transfer')
+                    array_push($writeArr, "Transfer Entry", "Manage Transfer");
+                if ($write == 'menu master')
+                    array_push($writeArr, "Create Menu", "Manage Menu");
+                if ($write == 'stocks')
+                    array_push($writeArr, "stocks");
+                if ($write == 'user')
+                    array_push($writeArr, "Create User", "Manage User");
+            }
+            $data['write'] = json_encode($writeArr);
+            $data['write_module'] = json_encode($request->write);
+        }
         if (User::where(['id' => $request->id])->update($data)) {
             return response()->json([
                 'message' => 'Admin Updated',
@@ -614,7 +670,7 @@ class Api extends Controller
             $brandSize = Brand::select('btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
             if (isset($brandSize)) {
                 $MlSize = ($brandSize[0]['btl_size'] * intval($no_btl[$key])) + ($brandSize[0]['peg_size'] * intval($no_peg[$key]));
-                $count = DailyOpening::where(['company_id' => $request->company_id,  'brand_id' => $brand])->get()->count();
+                $count = DailyOpening::where(['company_id' => $request->company_id,  'brand_id' => $brand, 'status' => 1])->get()->count();
                 if ($count > 0) {
                     // update existing entry
                     Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize]);
@@ -702,7 +758,7 @@ class Api extends Controller
         }
         if (($isSaved)) {
             return response()->json([
-                'message' => $total . ' Item opening added',
+                'message' => $total . ' physical updated',
                 'type' => 'success'
             ], 201);
         } else {
@@ -727,11 +783,25 @@ class Api extends Controller
                 Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['cost_price' => $cost[$key], 'btl_selling_price' => $btl_sell[$key]]);
                 $isSaved = true;
                 $total++;
+            } else {
+                $brandData = Brand::select('category_id')->where('id', $brand)->get()->first();
+                $data['category_id'] = $brandData['category_id'];
+                $data['company_id'] = $request->company_id;
+                $data['qty'] = 0;
+                $data['physical_closing'] = 0;
+                $data['brand_id'] = $brand;
+                $data['cost_price'] = $cost[$key];
+                $data['btl_selling_price'] = $btl_sell[$key];
+                $save = new Stock($data);
+                if ($save->save()) {
+                    $isSaved = true;
+                    $total++;
+                }
             }
         }
         if (($isSaved)) {
             return response()->json([
-                'message' => $total . ' Item opening added',
+                'message' => $total . ' price updated',
                 'type' => 'success'
             ], 201);
         }
@@ -1139,7 +1209,7 @@ class Api extends Controller
     }
     public function fetchUserId(Request $request)
     {
-        $data = User::select('id', 'name', 'mobile', 'email', 'roles')->where(['status' => 1, 'id' => $request->id])->get()->first();
+        $data = User::select('id', 'name', 'mobile', 'email', 'type', 'read', 'write', 'write_module')->where(['status' => 1, 'id' => $request->id])->get()->first();
         if ($data) {
             return response()->json($data);
         } else {
@@ -2083,8 +2153,14 @@ class Api extends Controller
             'brand_id' => 'required',
         ]);
         $response = [];
-        $data = Stock::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get();
+        $count = Stock::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get()->count();
         $brandSize = Brand::where('id', $req['brand_id'])->get();
+        if ($count == 0) {
+            array_push($response, array('btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size'], 'cost_price' => 0, 'btl_selling_price' => 0));
+            return $response;
+        }
+        $data = Stock::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get();
+
         if ($data) {
             $qty = !empty($data[0]['qty']) ? $data[0]['qty'] : 0;
             $openingData = DailyOpening::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->orderBy('id', 'DESC')->get()->first();
@@ -2138,17 +2214,17 @@ class Api extends Controller
             $peg = intval($total[1]);
             $data['company_id'] = $company_id;
             //$data['branch_id'] = $branch_id;
-            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%']])->get();
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%'], 'btl_size' => $dataArr['btl_size']])->get();
             if (count($brandSize) > 0) {
-                $count = Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->get()->count();
+                $count = Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id'], 'status' => 1])->get()->count();
                 $MlSize = ($brandSize[0]['btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
                 $data['category_id'] = $brandSize[0]['category_id'];
                 $data['brand_id'] = $brandSize[0]['id'];
                 if ($count === 0) {
                     $data['qty'] = $MlSize;
                     $data['physical_closing'] = $MlSize;
-                    $data['cost_price'] = $dataArr['cost_price'];
-                    $data['btl_selling_price'] = $dataArr['btl_selling_price'];
+                    $data['cost_price'] = $dataArr['cost_price'] ? $dataArr['cost_price'] : 0;
+                    $data['btl_selling_price'] = $dataArr['btl_selling_price'] ? $dataArr['btl_selling_price'] : 0;
                     //Stock entry
                     // $data['physical_closing'] = $MlSize;
                     $manage_stock = new Stock($data);
@@ -2210,7 +2286,7 @@ class Api extends Controller
             $peg = intval($total[1]);
             $data['company_id'] = $company_id;
             //$data['branch_id'] = $branch_id;
-            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%']])->get();
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%'], 'btl_size' => $dataArr['btl_size']])->get();
             if (count($brandSize) > 0) {
                 $count = Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->get()->count();
                 $MlSize = ($brandSize[0]['btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
@@ -2300,7 +2376,7 @@ class Api extends Controller
             $data['vendor_id'] = $supplier[0]['id'];
             $data['company_id'] = $company_id;
             // $data['branch_id'] = $branch_id;
-            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%']])->get();
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%'], 'btl_size' => $dataArr['btl_size']])->get();
             if (count($brandSize) < 1) {
                 array_push($failedData, $brandName);
                 $skipped++;
@@ -2387,7 +2463,7 @@ class Api extends Controller
 
             $success = false;
             $isCocktail = false;
-            $brands = Brand::select('id as brand_id', 'category_id')->where(['name' => $name, 'status' => 1])->get();
+            $brands = Brand::select('id as brand_id', 'category_id')->where(['name' => $name, 'status' => 1, 'btl_size' => $dataAr['btl_size']])->get();
             if (count($brands) < 1) {
                 $brands = Recipe::select('recipe_code', 'brand_id', 'serving_size', 'category_id', 'is_cocktail')->where(['name' => $name, 'company_id' => $data['company_id'], 'status' => 1])->get();
                 if (count($brands) < 1) {
@@ -2995,6 +3071,18 @@ class Api extends Controller
                 'message' => 'Oops! operation failed!',
                 'type' => 'failed'
             ]);
+        }
+    }
+    public function downloadBrands()
+    {
+        $brands = Brand::select('name', 'btl_size', 'peg_size')->where(['status' => 1])->get();
+        if ($brands) {
+            return response()->json($brands);
+        } else {
+            return response()->json([
+                'message' => 'Oops! Operation failed',
+                'type' => 'failed'
+            ], 401);
         }
     }
 }
