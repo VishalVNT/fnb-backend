@@ -24,9 +24,10 @@ Route::get('/', function () {
 
 Route::post('/login', [Api::class, 'login']);
 Route::post('/test', [Api::class, 'test']);
-Route::post('/register', [Api::class, 'register']);
+
 
 Route::group(['middleware' => ('auth:sanctum')], function () {
+    Route::post('/register', [Api::class, 'register']);
     //get methods
     Route::post('/logout', function (Request $request) {
         if ($request->user()->currentAccessToken()->delete())
@@ -39,9 +40,6 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
                 'message' => 'Opps! failed',
                 'type' => 'failed'
             ]);
-    });
-    Route::get('/user', function (Request $request) {
-        return $request->user();
     });
     Route::get('/getCompanies', [Api::class, 'getCompanies']);
     Route::get('/getBranch', [Api::class, 'getBranch']);
@@ -67,7 +65,6 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/getCompanyDetail', [Api::class, 'getCompanyDetail']);
     Route::post('/updateCompany', [Api::class, 'updateCompany']);
     Route::post('/branch', [Api::class, 'branch']);
-    Route::post('/user', [Api::class, 'user']);
     Route::post('/supplier', [Api::class, 'supplier']);
     Route::post('/category', [Api::class, 'category']);
     Route::post('/subcategory', [Api::class, 'subcategory']);
@@ -161,6 +158,15 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/BrandwiseReport', [Reports::class, 'BrandwiseReport']);
     Route::post('/YearlyReport', [Reports::class, 'YearlyReport']);
     Route::post('/YearlyComparison', [Reports::class, 'YearlyComparisonReport']);
-    Route::post('/AbstractReport', [Reports::class, 'AbstractReport']);
     Route::post('/DailyReport', [Reports::class, 'DailyReport']);
+    Route::post('/resetPassword', [Reports::class, 'resetPassword']);
+    Route::get('/downloadBrands', [Api::class, 'downloadBrands']);
+    Route::post('/AbstractReport', [Reports::class, 'AbstractReport']);
+    // stock
+    Route::post('/manage_opening', [Api::class, 'manage_opening']);
+    Route::post('/manage_physical', [Api::class, 'manage_physical']);
+    Route::post('/manage_price', [Api::class, 'manage_price']);
+
+    // permission
+    Route::get('/getPermission', [Api::class, 'getPermission']);
 });

@@ -16,9 +16,9 @@ return new class extends Migration
             $table->id();
             $table->integer('company_id');
             $table->integer('brand_id');
-            $table->string('qty');
-            $table->text('date');
-            $table->integer('status')->nullable()->default(1)->comment('1:active,0:inactive');
+            $table->integer('qty')->comment('in ml');
+            $table->date('date')->useCurrent();
+            $table->integer('status')->nullable()->default(1);
             $table->timestamps();
         });
     }
