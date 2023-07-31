@@ -491,11 +491,11 @@ class Reports extends Controller
                 $adjusted = 0 - $costing;
                 $adjusted_variance += $adjusted;
             }
-            $idealPer = ($consumption_cost + $adjusted_variance) / $request->net_revenue;
+            $idealPer = ($consumption_cost + $adjusted_variance) / $request->liquor;
             $ideal += $idealPer;
-            $grossPer = ($consumption_cost + $ncSaleqty) / $request->net_revenue;
+            $grossPer = ($consumption_cost + $ncSaleqty) / $request->liquor;
             $gross += $grossPer;
-            $netPer = $consumption_cost / $request->net_revenue;
+            $netPer = $consumption_cost / $request->liquor;
             $net += $netPer;
             // MTD CALCULATION
             $total2 = $opening_stock2 + $purchase_qty2;
@@ -515,22 +515,22 @@ class Reports extends Controller
                 $excess2 +=  $costing2;
                 $adjusted_variance2 += 0 - $costing2;
             }
-            $idealPer2 = ($consumption_cost2 + $adjusted_variance2) / $request->net_revenue2;
+            $idealPer2 = ($consumption_cost2 + $adjusted_variance2) / $request->liquor2;
             $ideal2 += $idealPer2;
-            $grossPer2 = ($consumption_cost2 + $ncSaleqty2) / $request->net_revenue2;
+            $grossPer2 = ($consumption_cost2 + $ncSaleqty2) / $request->liquor2;
             $gross2 += $grossPer2;
-            $netPer2 = $consumption_cost2 / $request->net_revenue2;
+            $netPer2 = $consumption_cost2 / $request->liquor2;
             $net2 += $netPer2;
         } //end of foreach
 
         $sales = array(
             'Title' => 'Net Sales Revenue',
             'Liquor' => $request->liquor !== null ? $request->liquor : 0,
-            'Beverage' => $request->beverage ?? 0,
+            'Beverage' => $request->beverage !== null ? $request->beverage : 0,
             'Total' => ($request->liquor !== null ? $request->liquor : 0) + ($request->beverage ?? 0),
-            'MTD Liquor' => $request->liquor !== null ? $request->liquor : 0,
-            'MTD Beverage' => $request->beverage ?? 0,
-            'MTD Total' => ($request->liquor !== null ? $request->liquor : 0) + ($request->beverage ?? 0)
+            'MTD Liquor' => $request->liquor2 !== null ? $request->liquor2 : 0,
+            'MTD Beverage' => $request->beverage2 !== null ? $request->beverage2 : 0,
+            'MTD Total' => ($request->liquor2 !== null ? $request->liquor2 : 0) + ($request->beverage2 ?? 0)
         );
         array_push($json, $sales);
         $consump = array(
@@ -586,7 +586,7 @@ class Reports extends Controller
         $idealArr = array(
             'Title' => 'Ideal Cost %',
             'Liquor' => $ideal,
-            'Beverage' => $ncSaleqty_beverage,
+            'Beverage' => $ncSaleqty_beverage, // need to be calculated
             'Total' => $ncSaleqty + $ncSaleqty_beverage,
             'MTD Liquor' => $ideal2,
             'MTD Beverage' =>  $ncSaleqty_beverage2,
@@ -744,14 +744,7 @@ class Reports extends Controller
 
 
                     $btl_size = $brandDetails->btl_size;
-                    /*$peg_size = $brandDetails->peg_size;
-					$btl_selling_price = $brandDetails->btl_selling_price ?? '0'; 
-					$peg_selling_price = $brandDetails->peg_selling_price ?? '0';
-					
-					$peg_count = intval($btl_size / $peg_size);  
-					$pegprice = intval($btl_selling_price / $peg_count);  
-					$amount = $peg_count * $peg_selling_price; */
-
+                    
                     $brand = array(
                         'category_name' => '',
                         'sales_date' => $salesDate,
@@ -801,11 +794,8 @@ class Reports extends Controller
 
                 $cat = array(
                     'category_name' => $name,
-                    //'brand_id' => '',
                     'brand_name' => '',
-                    //	'opening_qty' => '',
                     'btl_size' => '',
-                    //'peg_size' => '',
                     'opening_balance' => '',
                     'purchase' => '',
                     'total' => '',
@@ -815,21 +805,21 @@ class Reports extends Controller
 
 
                 [$data_daily_opening] = DB::table('daily_openings')
-                    ->select('qty')
+                    ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
                     ->where('company_id', $company_id)
                     ->where('brand_id', $brandId)
                     ->get();
                 $opening_qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
 
                 $data_purchase = DB::table('purchases')
-                    ->select('qty')
+                    ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
                     ->where('brand_id', $brandId)
                     ->where('company_id', $company_id)
                     ->first();
                 $purchase_qty = !empty($data_purchase->qty) ? $data_purchase->qty : 0;
 
                 $data_sales = DB::table('sales')
-                    ->select('qty')
+                    ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
                     ->where('brand_id', $brandId)
                     ->where('company_id', $company_id)
                     ->first();
@@ -871,11 +861,8 @@ class Reports extends Controller
 
                     $brand = array(
                         'category_name' => '',
-                        //'brand_id' => $brandId,
                         'brand_name' => $brandDetails->name,
-                        //'opening_qty' => $opening_qty,
                         'btl_size' => $btl_size,
-                        //'peg_size' => $peg_size,
                         'opening_balance' => $opening_balance,
                         'purchase' => $purchase,
                         'total' => $total,
@@ -889,11 +876,8 @@ class Reports extends Controller
             if ($catReset > 0) {
                 $brand = array(
                     'category_name' => '',
-                    //	'brand_id' => '',
                     'brand_name' => 'SUBTOTAL',
-                    //'opening_qty' => '',
                     'btl_size' => $btl_size,
-                    //'peg_size' => '',
                     'opening_balance' => $categoryOpeningBalance,
                     'purchase' => $categoryPurchase,
                     'total' => $categoryTotal,
