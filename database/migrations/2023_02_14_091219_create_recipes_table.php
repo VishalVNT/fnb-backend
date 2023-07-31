@@ -18,9 +18,9 @@ return new class extends Migration
             $table->integer('recipe_code');
             $table->string('name');
             $table->integer('company_id');
-			$table->integer('branch_id');
 			$table->integer('category_id')->nullable();
 			$table->integer('brand_id');
+            $table->integer('is_cocktail')->default(1)->comment('1:cocktail,0:non cocktail');
             $table->integer('serving_size');
             $table->integer('created_by');
             $table->integer('status')->nullable()->default(1)->comment('1:active,0:inactive');

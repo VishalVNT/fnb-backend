@@ -18,9 +18,11 @@ return new class extends Migration
             $table->string('name',100);
             $table->string('license_name',100);
             $table->string('license_no',100);
-            $table->string('address',100);
             $table->string('pan_no',100);
             $table->string('gst_no',100);
+            $table->string('address',200)->nullable();
+            $table->string('city',100)->nullable();
+            $table->string('pincode',10)->nullable();
             $table->integer('created_by')->nullable();
             $table->integer('status')->nullable()->default(1)->comment('1:active,0:inactive');
             $table->integer('is_deleted')->nullable()->default(0)->comment('1:active,0:inactive');;

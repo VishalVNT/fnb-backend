@@ -15,12 +15,12 @@ return new class extends Migration
     {
         Schema::create('subcategories', function (Blueprint $table) {
             $table->id();
-            $table->string('name',150);
-			$table->integer('category_id');
+            $table->string('name',250);
             $table->string('short_name',50);
+			$table->integer('category_id');
             $table->integer('created_by');
-            $table->integer('status')->nullable()->default(1)->comment('1:active,0:inactive');
-            $table->integer('is_deleted')->nullable()->default(0)->comment('1:active,0:inactive');   
+            $table->integer('status')->default(1)->comment('1:active,0:inactive');
+            $table->integer('is_deleted')->comment('1:active,0:inactive');   
             $table->timestamps();
         });
     }

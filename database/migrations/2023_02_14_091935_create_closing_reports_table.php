@@ -15,13 +15,16 @@ return new class extends Migration
     {
         Schema::create('closing_reports', function (Blueprint $table) {
             $table->id();
-            $table->integer('company_id');
-            $table->integer('branch_id');
-            $table->integer('category_id');
-            $table->integer('brand_id');
-            $table->float('opening');
-            $table->float('closing');
-            $table->float('physical_closing');
+            $table->integer('company_id')->nullable();
+            $table->integer('branch_id')->nullable();
+            $table->integer('category_id')->nullable();
+            $table->integer('brand_id')->nullable();
+            $table->float('opening_balance');
+            $table->float('closing_balance');
+            $table->float('physical_closing')->nullable()->comment('opening for next day');
+            $table->integer('selling_price')->nullable()->comment('peg price');
+            $table->integer('variance_sales')->nullable()->comment('total sale price');
+            $table->integer('variance_in_cost')->nullable()->comment('difference in tp & sale');
             $table->timestamps();
         });
     }
