@@ -1052,6 +1052,7 @@ class Api extends Controller
             ], 401);
         }
     }
+
     public function deleteRecipe(Request $request)
     {
         if (Recipe::where(['recipe_code' => $request->recipe_code])->update(['status' => 0])) {
@@ -1066,6 +1067,7 @@ class Api extends Controller
             ], 401);
         }
     }
+
     public function deleteRecipeId(Request $request)
     {
         if (Recipe::where(['id' => $request->id])->update(['status' => 0])) {
@@ -1141,16 +1143,13 @@ class Api extends Controller
     // get company
     public function getCompanies()
     {
-        $data = Company::select('name as value', 'id', DB::raw("CONCAT(name,' - ',license_no) AS label"))->where('status', 1)->get();
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+        $data = Company::select('name as value', 'id', DB::raw("CONCAT(name,' - ',license_no) AS label"))
+            ->where('status', 1)
+            ->get();
+
+        return response()->json($data);
     }
+
     // get company
     public function getAllCompanies(Request $request)
     {
@@ -1876,18 +1875,16 @@ class Api extends Controller
             'type' => 'failed'
         ]);
     }
+
     public function getBrandOptions(Request $request)
     {
-        $brands = Brand::select('name as value', 'name as label', 'id')->where(['category_id' => $request->category_id, 'status' => 1])->get();
-        if ($brands) {
-            return response()->json($brands);
-        } else {
-            return response()->json([
-                'message' => 'Oops! Operation failed',
-                'type' => 'failed'
-            ], 401);
-        }
+        $brands = Brand::select('name as value', 'name as label', 'id')
+            ->where(['category_id' => $request->category_id, 'status' => 1])
+            ->get();
+
+        return response()->json($brands);
     }
+
     public function getAllBrandOption(Request $request)
     {
         $brands = Brand::select('name as value', 'id', 'category_id', DB::raw('CONCAT(id," - ",name," - ",btl_size) as label'), DB::raw('0 as recipe'))->where(['status' => 1])->get();
