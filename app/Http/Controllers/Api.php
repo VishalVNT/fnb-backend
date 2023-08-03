@@ -1536,63 +1536,75 @@ class Api extends Controller
     }
     public function deleteSubCategory(Request $request)
     {
-        error_reporting(0);
-        $data = $request->validate([
+        $requestData = $request->validate([
             'id' => 'required'
         ]);
-        $task = Subcategory::where('id', $data['id'])->update(['status' => 0]);
-        if ($task) {
+
+        $affectedRows = Subcategory::where('id', $requestData['id'])->update(['status' => 0]);
+
+        if ($affectedRows > 0) {
             return response()->json([
                 'message' => 'Subcategory deleted',
                 'type' => 'success'
-            ], 201);
+            ], 200);
         } else {
             return response()->json([
                 'message' => 'Oops! operation failed!',
                 'type' => 'failed'
-            ]);
+            ], 404);
         }
     }
     public function deleteBrand(Request $request)
     {
-        error_reporting(0);
-        $data = $request->validate([
+        $requestData = $request->validate([
             'id' => 'required'
         ]);
-        $data = Brand::where('id', $data['id'])->update(['status' => 0]);
-        if ($data) {
+
+        $affectedRows = Brand::where('id', $requestData['id'])->update(['status' => 0]);
+
+        if ($affectedRows > 0) {
             return response()->json([
                 'message' => 'Company deleted',
                 'type' => 'success'
-            ], 201);
+            ], 200);
         } else {
             return response()->json([
                 'message' => 'Oops! operation failed!',
                 'type' => 'failed'
-            ]);
+            ], 404);
         }
     }
+
     public function deleteOPApi(Request $request)
     {
-        error_reporting(0);
-        $data = $request->validate([
+        $requestData = $request->validate([
             'id' => 'required'
         ]);
-        $daily = DailyOpening::where(['id' => $data['id'], 'status' => 1])->get()->first();
-        Stock::where(['company_id' => $daily['company_id'], 'brand_id' => $daily['brand_id']])->decrement('qty', intval($daily['qty']));
-        $res = DailyOpening::where('id', $data['id'])->update(['status' => 0]);
-        if ($res) {
+
+        try {
+            $daily = DailyOpening::where('id', $requestData['id'])->where('status', 1)->firstOrFail();
+
+            // Update 'Stock' model within a transaction
+            DB::transaction(function () use ($daily) {
+                Stock::where('company_id', $daily->company_id)
+                    ->where('brand_id', $daily->brand_id)
+                    ->decrement('qty', intval($daily->qty));
+
+                $daily->update(['status' => 0]);
+            });
+
             return response()->json([
                 'message' => 'Opening deleted',
                 'type' => 'success'
-            ], 201);
-        } else {
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
-                'message' => 'Oops! operation failed!',
+                'message' => 'Oops! Opening not found!',
                 'type' => 'failed'
-            ]);
+            ], 404);
         }
     }
+
     public function purchase(Request $request)
     {
         $data = $request->validate([
@@ -1790,6 +1802,7 @@ class Api extends Controller
             ], 401);
         }
     }
+
     public function deleteTp(Request $request)
     {
         $data = $request->validate([
@@ -1813,6 +1826,7 @@ class Api extends Controller
             'type' => 'failed'
         ]);
     }
+
     public function deleteTpList(Request $request)
     {
         $data = $request->validate([
@@ -1837,6 +1851,7 @@ class Api extends Controller
             'type' => 'failed'
         ]);
     }
+
     public function deleteSale(Request $request)
     {
         $data = $request->validate([
