@@ -197,18 +197,22 @@ class Api extends Controller
 
     public function deleteUser(Request $request)
     {
-        if (User::where(['id' => $request->id])->update(['status' => 0])) {
+        $user = User::findOrFail($request->id);
+        $deleted = $user->update(['status' => 0]);
+
+        if ($deleted) {
             return response()->json([
                 'message' => 'Admin deleted',
                 'type' => 'success'
-            ], 201);
+            ], 200);
         } else {
             return response()->json([
                 'message' => 'Oops! Operation failed',
                 'type' => 'failed'
-            ], 401);
+            ], 404);
         }
     }
+    
     public function login(Request $request)
     {
         $request->validate([
@@ -1170,7 +1174,8 @@ class Api extends Controller
     // get branch
     public function getCompanyDetail(Request $request)
     {
-        $data = Company::where(['status' => 1, 'id' => $request->company_id])->get()->first();
+        $data = Company::where(['status' => 1, 'id' => $request->company_id])->first();
+
         if ($data) {
             return response()->json($data);
         } else {
@@ -1184,14 +1189,8 @@ class Api extends Controller
     public function getUsers()
     {
         $data = User::where('status', 1)->get();
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+
+        return response()->json($data);
     }
     // get fetch user
     public function fetchUser(Request $request)
@@ -1298,7 +1297,8 @@ class Api extends Controller
     // fetch sales search
     public function fetchSalesDetail(Request $request)
     {
-        $data = Sales::where('id', $request->id)->get();
+        $data = Sales::where('id', $request->id)->first();
+
         if ($data) {
             return response()->json($data);
         } else {
@@ -1312,56 +1312,37 @@ class Api extends Controller
     // get supplier
     public function getSupplier(Request $request)
     {
-        $data = Supplier::where(['status' => 1])->get();
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+        $data = Supplier::where('status', 1)->get();
+
+        return response()->json($data);
     }
     // get supplier
     public function getSupplierOptions(Request $request)
     {
-        $data = Supplier::select('id', 'name as label', 'name as value')->where(['status' => 1])->get();
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+        $data = Supplier::select('id', 'name as label', 'name as value')->where('status', 1)->get();
+
+        return response()->json($data);
     }
     // get getBrand
     public function getBrand()
     {
-        $data = Brand::select('categories.name as c_name', 'subcategories.name as s_name', 'brands.*')->join('categories', 'brands.category_id', '=', 'categories.id')->join('subcategories', 'brands.subcategory_id', '=', 'subcategories.id')->where('brands.status', 1)->get();
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+        $data = Brand::select('categories.name as c_name', 'subcategories.name as s_name', 'brands.*')
+            ->join('categories', 'brands.category_id', '=', 'categories.id')
+            ->join('subcategories', 'brands.subcategory_id', '=', 'subcategories.id')
+            ->where('brands.status', 1)
+            ->get();
+
+        return response()->json($data);
     }
 
     //getCategory
     public function getCategory()
     {
         $data = Category::where('status', 1)->get();
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+
+        return response()->json($data);
     }
+
     public function getlinkedList(Request $request)
     {
         $data = LinkCompany::select('companies.name', 'companies.license_no', 'link_companies.id')->join('companies', 'companies.id', 'link_companies.link_company_id')->where(['link_companies.status' => 1, 'company_id' => $request->company_id])->get();
@@ -1374,33 +1355,22 @@ class Api extends Controller
             ]);
         }
     }
+    
     //getCategory
     public function getCategoryOptions()
     {
         $data = Category::select('*', 'name as label')->where('status', 1)->get();
-        //  echo "<pre>";print_r($data);exit();
 
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+        return response()->json($data);
     }
+
     public function getTypeOptions()
     {
         $data = Subcategory::select('*', 'name as label')->where('status', 1)->get();
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+
+        return response()->json($data);
     }
+
     public function subcategory(Request $request)
     {
         $data = $request->validate([
@@ -1497,7 +1467,6 @@ class Api extends Controller
     }
     public function deleteSupplier(Request $request)
     {
-        error_reporting(0);
         $data = $request->validate([
             'id' => 'required'
         ]);
@@ -1516,7 +1485,6 @@ class Api extends Controller
     }
     public function deleteCategory(Request $request)
     {
-        error_reporting(0);
         $data = $request->validate([
             'id' => 'required'
         ]);
@@ -1576,31 +1544,22 @@ class Api extends Controller
 
     public function deleteOPApi(Request $request)
     {
-        $requestData = $request->validate([
+        $data = $request->validate([
             'id' => 'required'
         ]);
-
-        try {
-            $daily = DailyOpening::where('id', $requestData['id'])->where('status', 1)->firstOrFail();
-
-            // Update 'Stock' model within a transaction
-            DB::transaction(function () use ($daily) {
-                Stock::where('company_id', $daily->company_id)
-                    ->where('brand_id', $daily->brand_id)
-                    ->decrement('qty', intval($daily->qty));
-
-                $daily->update(['status' => 0]);
-            });
-
+        $daily = DailyOpening::where(['id' => $data['id'], 'status' => 1])->get()->first();
+        Stock::where(['company_id' => $daily['company_id'], 'brand_id' => $daily['brand_id']])->decrement('qty', intval($daily['qty']));
+        $res = DailyOpening::where('id', $data['id'])->update(['status' => 0]);
+        if ($res) {
             return response()->json([
                 'message' => 'Opening deleted',
                 'type' => 'success'
-            ], 200);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            ], 201);
+        } else {
             return response()->json([
-                'message' => 'Oops! Opening not found!',
+                'message' => 'Oops! operation failed!',
                 'type' => 'failed'
-            ], 404);
+            ]);
         }
     }
 
@@ -2723,16 +2682,15 @@ class Api extends Controller
     //getSales
     public function getSalesList(Request $request)
     {
-        $data = Sales::select('brands.name', 'brands.id as brand_id', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.no_peg', 'sales.sale_date', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])->orderBy('id', 'DESC')->get();
-        if ($data) {
-            return response()->json($data);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
-                'type' => 'failed'
-            ]);
-        }
+        $data = Sales::select('brands.name', 'brands.id as brand_id', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.no_peg', 'sales.sale_date', 'sales.id')
+            ->join('brands', 'brands.id', '=', 'sales.brand_id')
+            ->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])
+            ->orderBy('id', 'DESC')
+            ->get();
+
+        return response()->json($data);
     }
+
     public function ValidateTp(Request $request)
     {
         $data = Purchase::where(['invoice_no' => $request->invoice_no, 'company_id' => $request->company_id, 'status' => 1])->get()->count();
