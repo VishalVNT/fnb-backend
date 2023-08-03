@@ -197,19 +197,16 @@ class Api extends Controller
 
     public function deleteUser(Request $request)
     {
-        $user = User::findOrFail($request->id);
-        $deleted = $user->update(['status' => 0]);
-
-        if ($deleted) {
+        if (User::where(['id' => $request->id])->update(['status' => 0])) {
             return response()->json([
                 'message' => 'Admin deleted',
                 'type' => 'success'
-            ], 200);
+            ], 201);
         } else {
             return response()->json([
                 'message' => 'Oops! Operation failed',
                 'type' => 'failed'
-            ], 404);
+            ], 401);
         }
     }
     
@@ -858,7 +855,6 @@ class Api extends Controller
     // create sales
     public function sales(Request $request)
     {
-        error_reporting(0);
         $data = $request->validate([
             'company_id' => 'required',
         ]);
@@ -931,7 +927,6 @@ class Api extends Controller
     }
     public function recipeSales(Request $request)
     {
-        error_reporting(0);
         $data = $request->validate([
             'company_id' => 'required',
         ]);
@@ -1147,11 +1142,15 @@ class Api extends Controller
     // get company
     public function getCompanies()
     {
-        $data = Company::select('name as value', 'id', DB::raw("CONCAT(name,' - ',license_no) AS label"))
-            ->where('status', 1)
-            ->get();
-
-        return response()->json($data);
+        $data = Company::select('name as value', 'id', DB::raw("CONCAT(name,' - ',license_no) AS label"))->where('status', 1)->get();
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
     }
 
     // get company
@@ -1190,7 +1189,14 @@ class Api extends Controller
     {
         $data = User::where('status', 1)->get();
 
-        return response()->json($data);
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
     }
     // get fetch user
     public function fetchUser(Request $request)
@@ -1314,14 +1320,28 @@ class Api extends Controller
     {
         $data = Supplier::where('status', 1)->get();
 
-        return response()->json($data);
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
     }
     // get supplier
     public function getSupplierOptions(Request $request)
     {
         $data = Supplier::select('id', 'name as label', 'name as value')->where('status', 1)->get();
 
-        return response()->json($data);
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
     }
     // get getBrand
     public function getBrand()
@@ -1332,7 +1352,14 @@ class Api extends Controller
             ->where('brands.status', 1)
             ->get();
 
-        return response()->json($data);
+            if ($data) {
+                return response()->json($data);
+            } else {
+                return response()->json([
+                    'message' => 'Oops! operation failed!',
+                    'type' => 'failed'
+                ]);
+            }
     }
 
     //getCategory
@@ -1340,7 +1367,14 @@ class Api extends Controller
     {
         $data = Category::where('status', 1)->get();
 
-        return response()->json($data);
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
     }
 
     public function getlinkedList(Request $request)
@@ -1361,14 +1395,28 @@ class Api extends Controller
     {
         $data = Category::select('*', 'name as label')->where('status', 1)->get();
 
-        return response()->json($data);
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
     }
 
     public function getTypeOptions()
     {
         $data = Subcategory::select('*', 'name as label')->where('status', 1)->get();
 
-        return response()->json($data);
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
     }
 
     public function subcategory(Request $request)
@@ -1523,22 +1571,20 @@ class Api extends Controller
     }
     public function deleteBrand(Request $request)
     {
-        $requestData = $request->validate([
+        $data = $request->validate([
             'id' => 'required'
         ]);
-
-        $affectedRows = Brand::where('id', $requestData['id'])->update(['status' => 0]);
-
-        if ($affectedRows > 0) {
+        $data = Brand::where('id', $data['id'])->update(['status' => 0]);
+        if ($data) {
             return response()->json([
                 'message' => 'Company deleted',
                 'type' => 'success'
-            ], 200);
+            ], 201);
         } else {
             return response()->json([
                 'message' => 'Oops! operation failed!',
                 'type' => 'failed'
-            ], 404);
+            ]);
         }
     }
 
@@ -1837,11 +1883,15 @@ class Api extends Controller
 
     public function getBrandOptions(Request $request)
     {
-        $brands = Brand::select('name as value', 'name as label', 'id')
-            ->where(['category_id' => $request->category_id, 'status' => 1])
-            ->get();
-
-        return response()->json($brands);
+        $brands = Brand::select('name as value', 'name as label', 'id')->where(['category_id' => $request->category_id, 'status' => 1])->get();
+        if ($brands) {
+            return response()->json($brands);
+        } else {
+            return response()->json([
+                'message' => 'Oops! Operation failed',
+                'type' => 'failed'
+            ], 401);
+        }
     }
 
     public function getAllBrandOption(Request $request)
@@ -2170,7 +2220,6 @@ class Api extends Controller
     }
     public function bulkStockImport(Request $request)
     {
-        error_reporting(0);
         $dataArray = $request->data;
         $company_id = $dataArray[0]['company_id'];
         // $branch_id = $dataArray[0]['branch_id'];
@@ -2242,7 +2291,6 @@ class Api extends Controller
     }
     public function PhysicalBulkApi(Request $request)
     {
-        error_reporting(0);
         $dataArray = $request->data;
         $company_id = $dataArray[0]['company_id'];
         // $branch_id = $dataArray[0]['branch_id'];
@@ -2682,13 +2730,15 @@ class Api extends Controller
     //getSales
     public function getSalesList(Request $request)
     {
-        $data = Sales::select('brands.name', 'brands.id as brand_id', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.no_peg', 'sales.sale_date', 'sales.id')
-            ->join('brands', 'brands.id', '=', 'sales.brand_id')
-            ->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])
-            ->orderBy('id', 'DESC')
-            ->get();
-
-        return response()->json($data);
+        $data = Sales::select('brands.name', 'brands.id as brand_id', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.no_peg', 'sales.sale_date', 'sales.id')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.company_id' => $request->company_id, 'sales.status' => 1])->orderBy('id', 'DESC')->get();
+        if ($data) {
+            return response()->json($data);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
     }
 
     public function ValidateTp(Request $request)
