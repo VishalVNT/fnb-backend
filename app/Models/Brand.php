@@ -10,13 +10,13 @@ class Brand extends Model
     use HasFactory;
     protected $fillable = [
         'name',
-        'code',
+		'code',
         'short_name',
-        'subcategory_id',
         'btl_size',
         'peg_size',
         'no_peg',
         'category_id',
+		'subcategory_id',
         'created_by'
     ];
 }

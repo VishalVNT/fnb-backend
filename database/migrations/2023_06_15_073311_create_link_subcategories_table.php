@@ -13,16 +13,14 @@ return new class extends Migration
      */
     public function up()
     {
-        Schema::create('transactions', function (Blueprint $table) {
+        Schema::create('subcategories', function (Blueprint $table) {
             $table->id();
-            $table->integer('company_id');
-            $table->integer('company_to_id');
-            $table->integer('brand_id');
-            $table->integer('qty')->default(0);
-            $table->integer('btl')->default(0);
-            $table->string('log');
-            $table->string('date');
+            $table->string('name',250);
+            $table->string('short_name',50);
+			$table->integer('category_id');
             $table->integer('created_by');
+            $table->integer('status')->default(1)->comment('1:active,0:inactive');
+            $table->integer('is_deleted')->comment('1:active,0:inactive');   
             $table->timestamps();
         });
     }
@@ -34,6 +32,6 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('transactions');
+        Schema::dropIfExists('subcategories');
     }
 };

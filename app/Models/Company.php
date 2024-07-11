@@ -14,8 +14,9 @@ class Company extends Model
         'license_no',
         'pan_no',
         'gst_no',
-        'address',
-        'city',
-        'pincode',
+		'address',
+		'city',
+		'pincode',
+		'created_by'
     ];
 }

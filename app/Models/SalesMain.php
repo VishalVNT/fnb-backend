@@ -5,14 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class ClosingReport extends Model
+class SalesMain extends Model
 {
     use HasFactory;
+
+    protected $table = 'sales_main';
+
 	protected $fillable = [
-        'branch_id',
-        'product_id',
-        'opening',
-        'closing',
-        'login'
+        'invoice_no',
+        'invoice_date',
+        'company_id',
+		'created_by',
     ];
 }
