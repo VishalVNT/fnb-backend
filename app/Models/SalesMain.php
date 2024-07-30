@@ -18,3 +18,4 @@ class SalesMain extends Model
 		'created_by',
     ];
 }
+ 

@@ -646,33 +646,36 @@ class Reports extends Controller
 
 
         foreach ($result as $row) {
-            $invoiceNo = $row->invoice_no;
-            $invoiceDate = $row->invoice_date;
-            $categoryGroup = $row->category_group;
-            $brandName = $row->brand_name;
-            $btlSize = $row->btl_size;
-            $quantity = $row->qty;
-            $rate = $row->mrp;
-            $amount = $row->total_amount;
-            $vendor_name = $row->vendor_name;
-            $brand_id = $row->brand_id;
+            if($row->qty > 0){
 
-            $stock = getBtlPeg($brand_id, $quantity);
-            $quantity1 = $stock['btl'] . "." . $stock['peg'];
-
-            $arr = [
-                'TP No.' => $invoiceNo,
-                'TP Date' => $invoiceDate,
-                'Group' => $categoryGroup,
-                'Brand Name' => $brandName,
-                'BTL Size' => $btlSize,
-                'Qty' => $quantity1,
-                'Rate' => $rate,
-                'Amount' => $amount,
-                'Vendor Name' => $vendor_name
-            ];
-            if (!empty($arr)) {
-                array_push($json, $arr);
+                $invoiceNo = $row->invoice_no;
+                $invoiceDate = $row->invoice_date;
+                $categoryGroup = $row->category_group;
+                $brandName = $row->brand_name;
+                $btlSize = $row->btl_size;
+                $quantity = $row->qty;
+                $rate = $row->mrp;
+                $amount = $row->total_amount;
+                $vendor_name = $row->vendor_name;
+                $brand_id = $row->brand_id;
+    
+                $stock = getBtlPeg($brand_id, $quantity);
+                $quantity1 = $stock['btl'] . "." . $stock['peg'];
+    
+                $arr = [
+                    'TP No.' => $invoiceNo,
+                    'TP Date' => $invoiceDate,
+                    'Group' => $categoryGroup,
+                    'Brand Name' => $brandName,
+                    'BTL Size' => $btlSize,
+                    'Qty' => $quantity1,
+                    'Rate' => $rate,
+                    'Amount' => $amount,
+                    'Vendor Name' => $vendor_name
+                ];
+                if (!empty($arr)) {
+                    array_push($json, $arr);
+                }
             }
             //array_push($json, $arr);
 
@@ -717,54 +720,56 @@ class Reports extends Controller
                 $no_peg = $sale->no_peg;
                 $sale_price = $sale->sale_price;
 
-                //	$data  = getrateamount($brandId);
-
-
-
-
-                /*	$brandDetails = DB::table('brands')
-					->where('id', $brandId)
-					->first(); */
-
-                $brandDetails = DB::table('brands')
-                    ->join('stocks', 'stocks.brand_id', '=', 'brands.id')
-                    ->where('brands.id', $brandId)
-                    ->first();
-
-                if ($brandDetails) {
-
-                    if (!in_array($name, $cat_array)) {
-                        array_push($json, $cat);
+                if($no_peg > 0){
+                    //	$data  = getrateamount($brandId);
+    
+    
+    
+    
+                    /*	$brandDetails = DB::table('brands')
+                        ->where('id', $brandId)
+                        ->first(); */
+    
+                    $brandDetails = DB::table('brands')
+                        ->join('stocks', 'stocks.brand_id', '=', 'brands.id')
+                        ->where('brands.id', $brandId)
+                        ->first();
+    
+                    if ($brandDetails) {
+    
+                        if (!in_array($name, $cat_array)) {
+                            array_push($json, $cat);
+                        }
+                        array_push($cat_array, $name);
+                        $price = getrateamount($brandId);
+                        $pegprice = $price['pegprice'];
+                        $amount = $price['amount'];
+    
+    
+                        $btl_size = $brandDetails->btl_size;
+                        /*$peg_size = $brandDetails->peg_size;
+                        $btl_selling_price = $brandDetails->btl_selling_price ?? '0'; 
+                        $peg_selling_price = $brandDetails->peg_selling_price ?? '0';
+                        
+                        $peg_count = intval($btl_size / $peg_size);  
+                        $pegprice = intval($btl_selling_price / $peg_count);  
+                        $amount = $peg_count * $peg_selling_price; */
+    
+                        $brand = array(
+                            'category_name' => '',
+                            'sales_date' => $salesDate,
+                            'brand_name' => $brandDetails->name,
+                            'btl_size' => $btl_size,
+                            //	'peg_size' => $peg_size,
+                            'qty_inpeg' => $no_peg,
+                            //'btl_selling_price' => $btl_selling_price,
+                            //'peg_selling_price' =>$peg_selling_price,
+                            'rate' => $pegprice,
+                            'amount' => $amount
+                        );
+    
+                        array_push($json, $brand);
                     }
-                    array_push($cat_array, $name);
-                    $price = getrateamount($brandId);
-                    $pegprice = $price['pegprice'];
-                    $amount = $price['amount'];
-
-
-                    $btl_size = $brandDetails->btl_size;
-                    /*$peg_size = $brandDetails->peg_size;
-					$btl_selling_price = $brandDetails->btl_selling_price ?? '0'; 
-					$peg_selling_price = $brandDetails->peg_selling_price ?? '0';
-					
-					$peg_count = intval($btl_size / $peg_size);  
-					$pegprice = intval($btl_selling_price / $peg_count);  
-					$amount = $peg_count * $peg_selling_price; */
-
-                    $brand = array(
-                        'category_name' => '',
-                        'sales_date' => $salesDate,
-                        'brand_name' => $brandDetails->name,
-                        'btl_size' => $btl_size,
-                        //	'peg_size' => $peg_size,
-                        'qty_inpeg' => $no_peg,
-                        //'btl_selling_price' => $btl_selling_price,
-                        //'peg_selling_price' =>$peg_selling_price,
-                        'rate' => $pegprice,
-                        'amount' => $amount
-                    );
-
-                    array_push($json, $brand);
                 }
             }
         }

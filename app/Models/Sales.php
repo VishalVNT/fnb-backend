@@ -14,6 +14,7 @@ class Sales extends Model
         'brand_id',
 		'category_id',
         'branch_id',
+		'recipe_id',
         'qty',
         'sale_price',
         'sales_type',
@@ -23,6 +24,7 @@ class Sales extends Model
 		'created_by',
 		'sale_date',
 		'no_btl',
-		'no_peg'
+		'no_peg',
+		'liquor_or_recipe'
     ];
 }

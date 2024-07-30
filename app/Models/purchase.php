@@ -16,7 +16,7 @@ class purchase extends Model
         'qty',
         'court_fees',
         'tcs',
-        'total_amount',
+        'total_amount', 
         'created_by',
         'invoice_no',
         'invoice_date',

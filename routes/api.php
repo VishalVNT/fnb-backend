@@ -105,7 +105,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/recipeSales', [Api::class, 'recipeSales']);
     Route::post('/manage_stock', [Api::class, 'manage_stock']);
     Route::post('/fetchSalesEditData', [Api::class, 'fetchSalesEditData']);
-    Route::post('/getStockApi', [Api::class, 'getStockApi']);
+    Route::post('/getStockApi', [Api::class, 'getStockApi']); 
     Route::post('/BarVarianceReport', [Api::class, 'BarVarianceReport']);
     Route::post('/BarVarianceReportMl', [Api::class, 'BarVarianceReportMl']);
     Route::post('/recipeFetchApi', [Api::class, 'recipeFetchApi']);
@@ -125,6 +125,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/updateSales', [Api::class, 'updateSales']);
     Route::post('/AddTransaction', [Api::class, 'AddTransaction']);
     Route::post('/fetchOpeningData', [Api::class, 'fetchOpeningData']);
+    Route::post('/updateOpening', [Api::class, 'updateOpening']);
     Route::post('/getPhysicalData', [Api::class, 'getPhysicalData']);
 
     // bulk upload Api
