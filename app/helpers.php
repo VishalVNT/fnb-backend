@@ -20,7 +20,7 @@ function getBtlPeg($brand_id, $qty)
 	if ($brandSize) {
 		$brand_size = $brandSize[0]['btl_size'];
 		// system stock
-		$btl = 0;
+		$btl = 0; 
 		$peg = 0;
 		while ($qty >= $brand_size) {
 			$qty = $qty - $brand_size;
