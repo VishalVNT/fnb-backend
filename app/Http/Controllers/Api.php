@@ -504,7 +504,7 @@ class Api extends Controller
             $brand = new Brand($data);
             if ($brand->save())
                 $isSaved = true;
-            $data_log = [
+            $data_01log = [
                 'user_type' => $request->user()->type,
                 'user_id' => $request->user()->id,
                 'ip' => $request->ip(),
@@ -803,7 +803,11 @@ class Api extends Controller
                         $saveOpening->save();
                     }
                     // update existing entry
-                    Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize, 'physical_closing' => $MlSize]);
+                    Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])
+                        ->update(['qty' => $MlSize, 'physical_closing' => $MlSize,
+                                 'store_btl' => intval($store_btl[$key]), 'store_peg' => intval($store_peg[$key]),
+                                'bar1_btl' => intval($bar1_btl[$key]), 'bar1_peg' => intval($bar1_peg[$key]),
+                                'bar2_btl' => intval($bar2_btl[$key]), 'bar2_peg' => intval($bar2_peg[$key])]);
                     $isSaved = true;
                     $total++;
                 }
@@ -977,7 +981,7 @@ class Api extends Controller
                     $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $brand)->get();
                     $MlSize = ($brandSize[0]['btl_size'] * $no_btl[$key]) + ($brandSize[0]['peg_size'] * $no_peg[$key]);
                 }
-                if ($stock[0]['qty'] > $MlSize) {
+                if ($stock[0]['qty'] >= $MlSize) {
                     $data['sale_price'] = ($no_btl[$key] * $stock[0]['btl_selling_price']) + ($no_peg[$key] * $stock[0]['peg_selling_price']);
                     $data['qty'] = $MlSize;
                     $data['no_btl'] = $no_btl[$key];
@@ -1756,6 +1760,26 @@ class Api extends Controller
             ]);
         }
     }
+    public function deletePhysicalApi(Request $request)
+    {
+        $data = $request->validate([
+            'id' => 'required'
+        ]);
+        $daily = physical_history::where(['id' => $data['id'], 'status' => 1])->get()->first();
+        Stock::where(['company_id' => $daily['company_id'], 'brand_id' => $daily['brand_id']])->increment('qty', intval($daily['qty']));
+        $res = physical_history::where('id', $data['id'])->update(['status' => 0]);
+        if ($res) {
+            return response()->json([
+                'message' => 'Opening deleted',
+                'type' => 'success'
+            ], 201);
+        } else {
+            return response()->json([
+                'message' => 'Oops! operation failed!',
+                'type' => 'failed'
+            ]);
+        }
+    }
     public function purchase(Request $request)
     {
         $data = $request->validate([
@@ -1764,11 +1788,11 @@ class Api extends Controller
         $isSaved = false;
         $brand = explode(',', $request->brand_id);
         $nobtl = explode(',', $request->nobtl);
-        $data['mrp'] = $request->mrp;
+        $mrp = explode(',', $request->mrp);
 		$data['invoice_no'] = $request->invoice_no;
         $data['court_fees'] = $request->court_fees;
         $data['tcs'] = $request->tcs;
-        $data['total_amount'] = $request->tot0wtal_amount;
+        $data['total_amount'] = $request->total_amount;
         $data['invoice_date'] = !empty($request->invoice_date) ? date('Y-m-d', strtotime($request->invoice_date)) : date('Y-m-d');
         $data['created_by'] = $request->user()->id;
         $data['batch_no'] = $request->batch_no;
@@ -1784,6 +1808,7 @@ class Api extends Controller
                 $data['purchase_list_id'] = $purchase_save->id;
                 $data['brand_id'] = $item;
                 $data['no_btl'] = $nobtl[$key];
+                $data['mrp'] = $mrp[$key];
                 $brandSize = Brand::select('btl_size', 'category_id')->where('id', $data['brand_id'])->get();
                 $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
                 $data['qty'] = $MlSize;
@@ -1866,11 +1891,15 @@ class Api extends Controller
     public function updatePurchase(Request $request)
     {
         $data = $request->validate([
-            'company_id' => 'required',
+            'company_id' => 'required'
         ]);
 
+        // $data['purchase_list_id'] = $request->purchase_list_id;
         $data['court_fees'] = $request->court_fees;
         $data['tcs'] = $request->tcs;
+        $data['batch_no'] = $request->batch_no;
+        $data['discount'] = $request->discount;
+        $data['vat'] = $request->vat;
         $data['total_amount'] = $request->total_amount;
         $data['invoice_no'] = $request->invoice_no;
         $data['invoice_date'] = date('Y-m-d', strtotime($request->invoice_date));
@@ -1879,17 +1908,25 @@ class Api extends Controller
         $data['vendor_id'] = $request->vendor_id;
         $brand = explode(',', $request->brand_id);
         $nobtl = explode(',', $request->nobtl);
+        $mrp = explode(',', $request->mrp);
         $p_Id = explode(',', $request->id);
-        $data['total_item'] = count($brand);
+        $data['total_item'] = count($brand); 
         $data['isInvoice'] = $data['total_amount'] > 0 ? 1 : 0;
-        $stockEntry = Purchase::select('no_btl')->where(['invoice_no' => $request->invoice_no])->get();
-        PurchaseList::where(['invoice_no' => $request->invoice_no])->update($data);
-        $data['mrp'] = $request->mrp;
+        // $stockEntry = Purchase::select('no_btl')->where(['purchase_list_id' => $request->purchase_list_id])->get();
+
+        $purchase_list_id = PurchaseList::where(['id' => $request->purchase_list_id])->select('id')->first();
+
+        PurchaseList::where(['id' => $request->purchase_list_id])->update($data);
+        // $data['mrp'] = $request->mrp;
         foreach ($brand as $key => $item) {
             unset($data['total_item']);
             unset($data['isInvoice']);
+            unset($data['discount']);
+            unset($data['vat']);
+            $data['purchase_list_id'] = $purchase_list_id->id;
             $data['brand_id'] = $item;
             $data['no_btl'] = $nobtl[$key];
+            $data['mrp'] = $mrp[$key];
             $brandSize = Brand::select('btl_size', 'category_id')->where('id', $data['brand_id'])->get();
             $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
             $data['qty'] = $MlSize;
@@ -1897,7 +1934,7 @@ class Api extends Controller
             $purchaseId = $p_Id[$key];
             if ($purchaseId > 0) {
                 Purchase::where(['id' => $purchaseId])->update($data);
-                $stockEntry = Purchase::select('no_btl')->where(['invoice_no' => $request->invoice_no, 'brand_id' => $data['brand_id']])->get();
+                $stockEntry = Purchase::select('no_btl')->where(['purchase_list_id' => $request->purchase_list_id, 'brand_id' => $data['brand_id']])->get();
                 if (count($stockEntry) > 0) {
                     $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $request->brand_id])->get()->count();
                     $brandSize = Brand::select('btl_size')->where('id', $data['brand_id'])->get();
@@ -2110,10 +2147,10 @@ class Api extends Controller
             foreach ($brands as $brand) {
                 array_push($dataArray, $brand);
             }
-            $data = Recipe::select('name as value', 'name as label', 'id', 'category_id', 'brand_id', 'serving_size', DB::raw('1 as recipe'))->where(['is_cocktail' => 0, 'company_id' => $request->company_id])->get();
-            foreach ($data as $brand) {
-                array_push($dataArray, $brand);
-            }
+            // $data = Recipe::select('name as value', 'name as label', 'id', 'category_id', 'brand_id', 'serving_size', DB::raw('1 as recipe'))->where(['is_cocktail' => 0, 'company_id' => $request->company_id])->get();
+            // foreach ($data as $brand) {
+            //     array_push($dataArray, $brand);
+            // }
             return response()->json($dataArray);
         } else {
             return response()->json([
@@ -2145,10 +2182,21 @@ class Api extends Controller
     // get transaction
     public function getTransaction(Request $request)
     {
-        if ($request->is_sender == 1)
-            $data = Transaction::select('transactions.id', 'companies.name as company', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'brands.btl_size',  'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->join('companies', 'companies.id', 'transactions.company_to_id')->where(['transactions.company_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
-        else
+        if ($request->is_sender == 1){
+            $data = Transaction::select('transactions.id','new_company_name','company_to_id', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'brands.btl_size',  'transactions.date')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
+            if(!empty($data)){
+                foreach($data as $ckey => $cval){
+                    if($cval->company_to_id === 0){
+                        $data[$ckey]->company = $cval->new_company_name;
+                    }else{
+                        $company = Company::where('id',$cval->company_to_id)->select('name')->first();
+                        $data[$ckey]->company = $company->name;
+                    }
+                }
+            }
+        }else{
             $data = Transaction::select('transactions.id', 'brands.name', 'companies.name as company', 'brands.id as brand_id', 'transactions.btl', 'brands.btl_size', 'transactions.qty', 'transactions.date')->join('companies', 'companies.id', 'transactions.company_id')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_id])->orderBy('transactions.id', 'DESC')->get();
+        }
         if ($data) {
             return response()->json($data);
         } else {
@@ -2292,8 +2340,7 @@ class Api extends Controller
                             }
                         }
                     }else{
-                        echo 'asdf';
-                        $brands = Recipe::select('category_id', 'brand_id', 'serving_size')->where(['recipe_code' => $brand, 'status' => 1])->get();                        
+                        $brandsData = Recipe::select('id','category_id', 'brand_id', 'serving_size')->where(['recipe_code' => $brand, 'status' => 1])->get();                        
                         $type = $sales_type[$key];
                         foreach ($brandsData as $brandData) {
                             $stocks = Stock::select('id','qty', 'btl_selling_price', 'peg_selling_price')->where(['company_id' => $data['company_id'], 'brand_id' => $brandData['brand_id']])->get();
@@ -2390,7 +2437,7 @@ class Api extends Controller
                             $brandSize = Brand::select('btl_size', 'peg_size')->where('id', $brand)->get();
                             $MlSize = ($brandSize[0]['btl_size'] * $no_btl[$key]) + ($brandSize[0]['peg_size'] * $no_peg[$key]);
                         }
-                        if ($stock[0]['qty'] > $MlSize) {
+                        if ($stock[0]['qty'] >= $MlSize) {
                             $sales_data['sale_price'] = ($no_btl[$key] * $stock[0]['btl_selling_price']) + ($no_peg[$key] * $stock[0]['peg_selling_price']);
                             $sales_data['qty'] = $MlSize;
                             $sales_data['no_btl'] = $no_btl[$key];
@@ -2897,6 +2944,7 @@ class Api extends Controller
             $supplier = Supplier::select('id')->where([['name', 'like', '%' . $dataArr['supplier'] . '%']])->get();
             
             if (empty($supplier[0]['id'])) {
+                $dataArr['reason'] = 'Supplier Not Found';
                 array_push($failedData, $dataArr);
                 $skipped++;
                 continue;
@@ -2908,6 +2956,7 @@ class Api extends Controller
             $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%']])->get();
             
             if (count($brandSize) < 1) {
+                $dataArr['reason'] = 'Brand Not Found';
                 array_push($failedData, $dataArr);
                 $skipped++;
                 continue;
@@ -2955,6 +3004,7 @@ class Api extends Controller
                 }
                 $isSaved = true;
             } else {
+                $dataArr['reason'] = 'TP not added';
                 array_push($failedData, $dataArr);
                 $skipped++;
             }
@@ -3028,6 +3078,7 @@ class Api extends Controller
                 if (count($brands) < 1) {
                     $brands = Recipe::select('recipe_code', 'brand_id', 'serving_size', 'category_id', 'is_cocktail')->where(['name' => $name, 'company_id' => $data['company_id'], 'status' => 1])->get();
                     if (count($brands) < 1) {
+                        $dataAr['reason'] = 'Brand Not Found';
                         array_push($failed_data, $dataAr);
                         $skipped++;
                         continue; // if no matching brand or recipe found then skip to next entry
@@ -3189,14 +3240,17 @@ class Api extends Controller
                                 SaveLog($data_log);
                                 $counter++;
                             } else {
+                                $dataAr['reason'] = 'Sale Not Submitted';
                                 array_push($failed_data, $dataAr);
                                 $skipped++;
                             }
                         } else {
+                            $dataAr['reason'] = 'Stock Not Available';
                             array_push($failed_data, $dataAr);
                             $skipped++;
                         }
                     }else {
+                        $dataAr['reason'] = 'Stock Not Available';
                         array_push($failed_data, $dataAr);
                         $skipped++;
                     }
@@ -3284,17 +3338,29 @@ class Api extends Controller
     //getSales
     public function getSalesList(Request $request)
     {
-        $data = SalesMain::select('invoice_no', 'invoice_date', 'id', DB::raw('
-            (SELECT COUNT(*) FROM sales 
-            WHERE sales.sales_main_id = sales_main.id 
-            AND sales.status = 1 AND sales.is_deleted = 0) as total_items'))
-            ->where('sales_main.status','1')
-            ->where('sales_main.is_deleted','0')
+        $data = SalesMain::select(
+            'invoice_no', 
+            'invoice_date', 
+            'id', 
+            DB::raw('
+                (SELECT COUNT(*) 
+                 FROM sales 
+                 WHERE sales.sales_main_id = sales_main.id 
+                 AND sales.status = 1 AND sales.is_deleted = 0) as total_items'),
+            DB::raw('
+                (SELECT GROUP_CONCAT(b.name SEPARATOR ", ") 
+                 FROM sales s 
+                 JOIN brands b ON s.brand_id = b.id 
+                 WHERE s.sales_main_id = sales_main.id 
+                 AND s.status = 1 AND s.is_deleted = 0) as brand_names')
+            )
+            ->where('sales_main.status', '1')
+            ->where('sales_main.is_deleted', '0')
             ->where(['company_id' => $request->company_id, 'status' => 1])
             ->having('total_items', '>', 0)
             ->orderBy('id', 'DESC')
             ->get();
-
+        
         if ($data->isNotEmpty()) {
             return response()->json($data);
         } else {
@@ -3303,6 +3369,7 @@ class Api extends Controller
                 'type' => 'failed'
             ]);
         }
+        
     }
 
     //getSales
@@ -3316,7 +3383,7 @@ class Api extends Controller
         if(!empty($check_for_sale)){
             if($check_for_sale->description == 'liquor sale'){
                 if(!empty($salesId)){
-                    $data = Sales::select('brands.name', 'brands.category_id', 'brands.id as brand_id','brands.btl_size as size','brands.peg_size as peg_size', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.no_peg', 'sales.sale_date', 'sales.id', 'sales.description')->join('brands', 'brands.id', '=', 'sales.brand_id')->where(['sales.sales_main_id' => $request->id, 'sales.status' => 1])->orderBy('id', 'DESC')->get();
+                    $data = Sales::select('brands.name', 'brands.category_id', 'brands.id as brand_id','brands.btl_size as size','brands.peg_size as peg_size', 'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 'sales.no_peg', 'sales.sale_date', 'sales.id', 'sales.description','subcategories.name as subcategory_name')->join('brands', 'brands.id', '=', 'sales.brand_id')->join('subcategories','subcategories.id', '=','brands.subcategory_id')->where(['sales.sales_main_id' => $request->id, 'sales.status' => 1])->orderBy('id', 'DESC')->get();
                     if ($data) {
                         return response()->json($data);
                     } else {
@@ -3371,34 +3438,36 @@ class Api extends Controller
                             // calculate glass
                             $parameters_for_glass = Recipe::where('recipes.id',$value['recipe_id'])->join('brands','brands.id','recipes.brand_id')->select('peg_size','serving_size')->first();
 
-                            $glassQty = ($value['no_peg'] * $parameters_for_glass->peg_size) / $parameters_for_glass->serving_size;
-                            $value['glass_qty'] = round($glassQty);
-
-                            // Get all the brands in this recipe
-                            $brands_in_recipe = Recipe::where('recipe_code', $recipe_code[0])
-                                ->select('brands.name', 'serving_size','peg_size')
-                                ->join('brands', 'brands.id', '=', 'recipes.brand_id')
-                                ->join('sales', 'sales.brand_id', '=', 'recipes.brand_id')
-                                ->where('recipes.status', 1)
-                                ->where('brands.status', 1)
-                                ->where('sales.status', 1)
-                                ->where('sales.sales_main_id',$request->id)
-                                ->get();
-
-                    
-                            $value['brands'] = [];
-                            if ($brands_in_recipe->isNotEmpty()) {
-                                foreach ($brands_in_recipe as $brandKey => $brandValue) {
-
-                                    $peg_qty = ($value['no_peg'] * $brandValue['serving_size']) / $brandValue['peg_size'];
-
-
-                                    $value['brands'][] = [
-                                        'name' => $brandValue->name,
-                                        'serving_size' => $brandValue->serving_size,
-                                        'peg_size' => $brandValue->peg_size,
-                                        'peg_qty' => round($peg_qty)
-                                    ];
+                            if(!empty($parameters_for_glass)){
+                                $glassQty = ($value['no_peg'] * $parameters_for_glass->peg_size) / $parameters_for_glass->serving_size;
+                                $value['glass_qty'] = round($glassQty);
+    
+                                // Get all the brands in this recipe
+                                $brands_in_recipe = Recipe::where('recipe_code', $recipe_code[0])
+                                    ->select('brands.name', 'serving_size','peg_size')
+                                    ->join('brands', 'brands.id', '=', 'recipes.brand_id')
+                                    ->join('sales', 'sales.brand_id', '=', 'recipes.brand_id')
+                                    ->where('recipes.status', 1)
+                                    ->where('brands.status', 1)
+                                    ->where('sales.status', 1)
+                                    ->where('sales.sales_main_id',$request->id)
+                                    ->get();
+    
+                        
+                                $value['brands'] = [];
+                                if ($brands_in_recipe->isNotEmpty()) {
+                                    foreach ($brands_in_recipe as $brandKey => $brandValue) {
+    
+                                        $peg_qty = ($value['no_peg'] * $brandValue['serving_size']) / $brandValue['peg_size'];
+    
+    
+                                        $value['brands'][] = [
+                                            'name' => $brandValue->name,
+                                            'serving_size' => $brandValue->serving_size,
+                                            'peg_size' => $brandValue->peg_size,
+                                            'peg_qty' => round($peg_qty)
+                                        ];
+                                    }
                                 }
                             }
                         }
@@ -3638,36 +3707,70 @@ class Api extends Controller
             $data['brand_id'] = $item;
             $brandSize = Brand::select('btl_size', 'category_id')->where('id', $data['brand_id'])->get()->first();
             $MlSize = ($brandSize['btl_size'] * $nobtl[$key]);
-            if (Stock::where(['company_id' => $data['company_id'], 'brand_id' => $data['brand_id'], ['qty', '>', $MlSize]])->get()->count() > 0) {
+            // if (Stock::where(['company_id' => $data['company_id'], 'brand_id' => $data['brand_id'], ['qty', '>', $MlSize]])->get()->count() > 0) {
                 $data['qty'] = $MlSize;
                 $data['btl'] = $nobtl[$key];
                 $data['date'] = date('Y-m-d', strtotime($request->date));
+
+                if($request->new_company_or_existing !== 'existing'){
+                    $data['company_to_id'] = 0;
+                    $data['new_company_name'] = $request->company_to_id;
+                }
                 $Transaction = new Transaction($data);
                 if ($Transaction->save()) {
-                    if (Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize)) {
-                        // add item in stocks of receiver company
-                        $stockNum = Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->get()->count();
+                    // if (Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize)) {
+                    //     // add item in stocks of receiver company
+                    //     $stockNum = Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->get()->count();
 
-                        if ($stockNum > 0)
-                            Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize); // if item already exist in store
-                        else {
-                            // if item is new in store
-                            $data['company_id'] = $request->company_to_id;
+                    //     if ($stockNum > 0)
+                    //         Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize); // if item already exist in store
+                    //     else {
+                    //         // if item is new in store
+                    //         $data['company_id'] = $request->company_to_id;
+                    //         $data['category_id'] = $brandSize['category_id'];
+                    //         $data['brand_id'] = $data['brand_id'];
+                    //         $data['qty'] = $MlSize;
+                    //         $manage_stock = new Stock($data);
+                    //         $manage_stock->save();
+                    //     }
+                    // }
+
+                    // code edited by vishal rana on 1508
+                    // if (Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize)) {
+                        // add item in stocks of receiver company
+
+                        if($request->new_company_or_existing === 'existing'){
+                            $stockNum = Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->get()->count();
+    
+                            if ($stockNum > 0)
+                                Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize); // if item already exist in store
+                            else {
+                                // if item is new in store
+                                $data['company_id'] = $request->company_to_id;
+                                $data['category_id'] = $brandSize['category_id'];
+                                $data['brand_id'] = $data['brand_id'];
+                                $data['qty'] = $MlSize;
+                                $manage_stock = new Stock($data);
+                                $manage_stock->save();
+                            }
+                        }else{
+                            $data['company_id'] = 0;
+                            $data['company_name_for_transfer'] = $request->company_to_id;
                             $data['category_id'] = $brandSize['category_id'];
                             $data['brand_id'] = $data['brand_id'];
                             $data['qty'] = $MlSize;
                             $manage_stock = new Stock($data);
                             $manage_stock->save();
                         }
-                    }
+                    // }
                     $saved = true;
                     $counter++;
                 } else {
                     $skipped++;
                 }
-            } else {
-                $skipped++;
-            }
+            // } else {
+            //     $skipped++;
+            // }
         }
         if ($saved) {
             // logs
@@ -3787,6 +3890,55 @@ class Api extends Controller
             ], 401);
         }
     }
+    public function updatePhysical(Request $request)
+    {
+        $brand = $request->brand_id;
+        $no_btl = $request->btlQty;
+        $no_peg = $request->pegQty;
+        $qtyStoreBtl = $request->qtyStoreBtl;
+        $qtyStorePeg = $request->qtyStorePeg;
+        $qtyBar1Btl = $request->qtyBar1Btl;
+        $qtyBar1Peg = $request->qtyBar1Peg;
+        $qtyBar2Btl = $request->qtyBar2Btl;
+        $qtyBar2Peg = $request->qtyBar2Peg;
+        $opening_id = $request->id;
+        $dateTime = new DateTime($request->date);
+        $date = $dateTime->format('Y-m-d');
+        $isSaved = false;
+
+        $brandSize = Brand::select('btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
+        if (isset($brandSize)) {
+            $MlSize = ($brandSize[0]['btl_size'] * intval($no_btl)) + ($brandSize[0]['peg_size'] * intval($no_peg));
+            $physicalData = physical_history::where(['id' => $opening_id,'company_id' => $request->company_id,  'brand_id' => $brand, 'status' => 1])->first();
+            if ($physicalData) {
+                // stock old quantity
+                $stock_old_qty = Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->select('qty')->first();
+
+                // remove this opening row qty from stock and add new qty
+                $stkQty = $stock_old_qty->qty + $physicalData->qty - $MlSize;
+                // update existing entry
+                Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $stkQty]);
+                // update daily opening
+
+                physical_history::where(['id' => $opening_id,'company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize, 'store_btl' => $qtyStoreBtl, 'store_peg' => $qtyStorePeg, 'bar1_btl' => $qtyBar1Btl, 'bar1_peg' => $qtyBar1Peg, 'bar2_btl' => $qtyBar2Btl, 'bar2_peg' => $qtyBar2Peg, 'date' => $date]);
+                $isSaved = true;
+                return response()->json([
+                    'message' => 'Item physical updated',
+                    'type' => 'success'
+                ], 201);
+            } else {
+                return response()->json([
+                    'message' => 'Oops! Operation failed',
+                    'type' => 'failed'
+                ], 401);
+            }
+        }else{
+            return response()->json([
+                'message' => 'Oops! Operation failed',
+                'type' => 'failed'
+            ], 401);
+        }
+    }
     public function getPriceList(Request $request)
     {
         $data = $request->validate([
@@ -3816,15 +3968,35 @@ class Api extends Controller
         $data = $request->validate([
             'company_id' => 'required'
         ]);
+
+        // old code
+        // if (!empty($request->keyword))
+        //     $res = Stock::join('brands', 'stocks.brand_id', '=', 'brands.id', 'physical_closing as qty', 'brands.btl_size', 'brands.peg_size')->join('categories', 'categories.id', '=', 'brands.category_id')
+        //         ->where('stocks.company_id', $data['company_id'])->where('stocks.physical_closing', '>', 0)
+        //         ->where('brands.name', 'like', '%' . $request->keyword . '%')
+        //         ->orderBy('stocks.updated_at','desc')
+        //         ->get();
+
+        // else
+        //     $res = Stock::select('stocks.*', 'brands.name', 'categories.name as category', 'physical_closing as qty', 'brands.btl_size', 'brands.peg_size')->join('brands', 'stocks.brand_id', '=', 'brands.id')->join('categories', 'categories.id', '=', 'brands.category_id')
+        //         ->where('stocks.company_id', $data['company_id'])->where('stocks.physical_closing', '>', 0)
+        //         ->orderBy('stocks.updated_at','desc')
+        //         ->get();
+
+        // new code by vishal
         if (!empty($request->keyword))
-            $res = Stock::join('brands', 'stocks.brand_id', '=', 'brands.id', 'physical_closing as qty', 'brands.btl_size', 'brands.peg_size')->join('categories', 'categories.id', '=', 'brands.category_id')
-                ->where('stocks.company_id', $data['company_id'])->where('stocks.physical_closing', '>', 0)
+            $res = physical_history::join('brands', 'physical_histories.brand_id', '=', 'brands.id', 'qty', 'brands.btl_size', 'brands.peg_size')->join('categories', 'categories.id', '=', 'brands.category_id')
+                ->where('physical_histories.company_id', $data['company_id'])
                 ->where('brands.name', 'like', '%' . $request->keyword . '%')
+                ->orderBy('physical_histories.date','desc')
+                ->where('physical_histories.status',1)
                 ->get();
 
         else
-            $res = Stock::select('stocks.*', 'brands.name', 'categories.name as category', 'physical_closing as qty', 'brands.btl_size', 'brands.peg_size')->join('brands', 'stocks.brand_id', '=', 'brands.id')->join('categories', 'categories.id', '=', 'brands.category_id')
-                ->where('stocks.company_id', $data['company_id'])->where('stocks.physical_closing', '>', 0)
+            $res = physical_history::select('physical_histories.*', 'brands.name', 'categories.name as category', 'qty', 'brands.btl_size', 'brands.peg_size')->join('brands', 'physical_histories.brand_id', '=', 'brands.id')->join('categories', 'categories.id', '=', 'brands.category_id')
+                ->where('physical_histories.company_id', $data['company_id'])
+                ->orderBy('physical_histories.date','desc')
+                ->where('physical_histories.status',1)
                 ->get();
 
         if ($res) {

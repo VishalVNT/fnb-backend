@@ -30,7 +30,8 @@ function getBtlPeg($brand_id, $qty)
 			$qty = $qty - $brandSize[0]['peg_size'];
 			$peg++;
 		}
-		return array('btl' => $btl, 'peg' => $peg, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size']);
+		$formattedPeg = sprintf('%02d', $peg);
+		return array('btl' => $btl, 'peg' => $formattedPeg, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size']);
 	}
 	return array('btl' => 0, 'peg' => 0, 'btl_size' => 0, 'peg_size' => 0);
 }

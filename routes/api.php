@@ -88,6 +88,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/deleteSubCategory', [Api::class, 'deleteSubCategory']);
     Route::post('/deleteBrand', [Api::class, 'deleteBrand']);
     Route::post('/deleteOPApi', [Api::class, 'deleteOPApi']);
+    Route::post('/deletePhysicalApi', [Api::class, 'deletePhysicalApi']);
     Route::post('/deleteRecipe', [Api::class, 'deleteRecipe']);
     Route::post('/deleteRecipeId', [Api::class, 'deleteRecipeId']);
     Route::post('/deleteLinkApi', [Api::class, 'deleteLinkApi']);
@@ -126,6 +127,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/AddTransaction', [Api::class, 'AddTransaction']);
     Route::post('/fetchOpeningData', [Api::class, 'fetchOpeningData']);
     Route::post('/updateOpening', [Api::class, 'updateOpening']);
+    Route::post('/updatePhysical', [Api::class, 'updatePhysical']);
     Route::post('/getPhysicalData', [Api::class, 'getPhysicalData']);
 
     // bulk upload Api
