@@ -116,6 +116,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/getAllBrandOption', [Api::class, 'getAllBrandOption']);
     Route::post('/getAllMenuOption', [Api::class, 'getAllMenuOption']);
     Route::post('/getAllBrandSales', [Api::class, 'getAllBrandSales']);
+    Route::post('/getAllBrandSalesForPhysical', [Api::class, 'getAllBrandSalesForPhysical']);
     Route::post('/fetchPurchaseData', [Api::class, 'fetchPurchaseData']);
     Route::post('/updatePurchase', [Api::class, 'updatePurchase']);
     Route::post('/convertPurchase', [Api::class, 'convertPurchase']);

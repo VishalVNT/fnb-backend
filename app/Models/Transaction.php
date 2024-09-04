@@ -11,6 +11,7 @@ class Transaction extends Model
     protected $fillable = [
         'company_id',
         'company_to_id',
+        'transaction_type',
         'brand_id',
         'qty',
         'btl',
