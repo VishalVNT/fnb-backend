@@ -11,12 +11,14 @@ class Transaction extends Model
     protected $fillable = [
         'company_id',
         'company_to_id',
+        'new_company_name',
         'transaction_type',
         'brand_id',
         'qty',
         'btl',
         'log',
         'date',
+        'status',
         'created_by'
     ];
 }

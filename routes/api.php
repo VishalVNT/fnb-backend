@@ -122,10 +122,12 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::post('/convertPurchase', [Api::class, 'convertPurchase']);
     Route::post('/deleteTp', [Api::class, 'deleteTp']);
     Route::post('/deleteTpList', [Api::class, 'deleteTpList']);
+    Route::post('/deleteTransfer', [Api::class, 'deleteTransfer']);
     Route::post('/deleteSale', [Api::class, 'deleteSale']);
     Route::post('/deleteIndivisualSale', [Api::class, 'deleteIndivisualSale']);
     Route::post('/updateSales', [Api::class, 'updateSales']);
     Route::post('/AddTransaction', [Api::class, 'AddTransaction']);
+    Route::post('/UpdateTransaction', [Api::class, 'UpdateTransaction']);
     Route::post('/fetchOpeningData', [Api::class, 'fetchOpeningData']);
     Route::post('/updateOpening', [Api::class, 'updateOpening']);
     Route::post('/updatePhysical', [Api::class, 'updatePhysical']);
