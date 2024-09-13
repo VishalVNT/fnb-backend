@@ -35,6 +35,40 @@ function getBtlPeg($brand_id, $qty)
 	}
 	return array('btl' => 0, 'peg' => 0, 'btl_size' => 0, 'peg_size' => 0);
 }
+function getBtlPegForRecipe($brand_id, $qty)
+{
+	$brandSize = Brand::select('btl_size', 'peg_size')->where('id', $brand_id)->get();
+	if ($brandSize) {
+		if($brandSize[0]['btl_size'] == $brandSize[0]['peg_size']){
+			$brand_size = $brandSize[0]['btl_size'];
+			// system stock
+			$btl = 0; 
+			$peg = 0;
+			while ($qty >= $brandSize[0]['peg_size']) {
+				$qty = $qty - $brandSize[0]['peg_size'];
+				$peg++;
+			}
+			$formattedPeg = sprintf('%02d', $peg);
+			return array('btl' => $btl, 'peg' => $formattedPeg, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size']);
+		}else{
+			$brand_size = $brandSize[0]['btl_size'];
+			// system stock
+			$btl = 0; 
+			$peg = 0;
+			while ($qty >= $brand_size) {
+				$qty = $qty - $brand_size;
+				$btl++;
+			}
+			while ($qty >= $brandSize[0]['peg_size']) {
+				$qty = $qty - $brandSize[0]['peg_size'];
+				$peg++;
+			}
+			$formattedPeg = sprintf('%02d', $peg);
+			return array('btl' => $btl, 'peg' => $formattedPeg, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size']);
+		}
+	}
+	return array('btl' => 0, 'peg' => 0, 'btl_size' => 0, 'peg_size' => 0);
+}
 function convertBtlPeg($qty, $brandSize, $peg_size)
 {
 	if ($brandSize > 0) {

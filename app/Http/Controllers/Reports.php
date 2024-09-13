@@ -630,6 +630,7 @@ class Reports extends Controller
                 'categories.name as category_group',
                 'brands.name as brand_name',
                 'btl_size',
+                'purchases.no_btl',
                 DB::raw('COALESCE(qty, 0) as qty'),
                 DB::raw('COALESCE(mrp, 0) as mrp'),
                 DB::raw('COALESCE(total_amount, 0) as total_amount'),
@@ -639,6 +640,7 @@ class Reports extends Controller
             ->join('purchases', 'purchases.brand_id', '=', 'brands.id')
             ->join('categories', 'categories.id', '=', 'brands.category_id')
             ->join('suppliers', 'suppliers.id', '=', 'purchases.vendor_id')
+            ->where('purchases.status',1)
             ->whereDate('invoice_date', '>=', $from_date)
             ->whereDate('invoice_date', '<=', $to_date)
             ->where('purchases.company_id', $company_id)
@@ -655,7 +657,7 @@ class Reports extends Controller
                 $btlSize = $row->btl_size;
                 $quantity = $row->qty;
                 $rate = $row->mrp;
-                $amount = $row->total_amount;
+                $amount = $row->mrp * $row->no_btl;
                 $vendor_name = $row->vendor_name;
                 $brand_id = $row->brand_id;
     
@@ -699,6 +701,7 @@ class Reports extends Controller
                 ->whereDate('sale_date', '>=', $request->from_date)
                 ->whereDate('sale_date', '<=', $request->to_date)
                 ->where('company_id', $company_id)
+                ->where('sales.status',1)
                 ->get();
             foreach ($salesData as $sale) {
                 $cat = array(
@@ -717,33 +720,49 @@ class Reports extends Controller
                 $brandId = $sale->brand_id;
                 $salesDate = $sale->sale_date;
                 $sales_qty = $sale->qty;
-                $no_peg = $sale->no_peg;
                 $sale_price = $sale->sale_price;
 
+                $rate = 0;
+
+                $rateDataFromStocks = DB::table('stocks')->where('company_id', $company_id)->where('brand_id', $brandId)->select('peg_selling_price')->orderBy('id', 'desc')->first();
+                
+                if(!empty($rateDataFromStocks)){
+                    $rate = $rateDataFromStocks->peg_selling_price;
+                }
+                
+                //	$data  = getrateamount($brandId);
+                
+                
+                
+                
+                /*	$brandDetails = DB::table('brands')
+                ->where('id', $brandId)
+                ->first(); */
+                
+                $brandDetails = DB::table('brands')
+                ->join('stocks', 'stocks.brand_id', '=', 'brands.id')
+                ->where('brands.id', $brandId)
+                ->first();
+
+                $no_btl = $sale->no_btl;
+                $no_peg = (($brandDetails->btl_size/$brandDetails->peg_size) * $sale->no_btl) + $sale->no_peg;
+
                 if($no_peg > 0){
-                    //	$data  = getrateamount($brandId);
-    
-    
-    
-    
-                    /*	$brandDetails = DB::table('brands')
-                        ->where('id', $brandId)
-                        ->first(); */
-    
-                    $brandDetails = DB::table('brands')
-                        ->join('stocks', 'stocks.brand_id', '=', 'brands.id')
-                        ->where('brands.id', $brandId)
-                        ->first();
-    
+
                     if ($brandDetails) {
     
                         if (!in_array($name, $cat_array)) {
                             array_push($json, $cat);
                         }
                         array_push($cat_array, $name);
-                        $price = getrateamount($brandId);
-                        $pegprice = $price['pegprice'];
-                        $amount = $price['amount'];
+
+                        // old code to get rate and amount
+                        // $price = getrateamount($brandId);
+                        // $pegprice = $price['pegprice'];
+                        // $amount = $price['amount'];
+
+                        // new code to get rate and amount by Vishal as per client requirement on 12-09-2024
+                        $amount = intval($no_peg) * $rate; 
     
     
                         $btl_size = $brandDetails->btl_size;
@@ -761,10 +780,12 @@ class Reports extends Controller
                             'brand_name' => $brandDetails->name,
                             'btl_size' => $btl_size,
                             //	'peg_size' => $peg_size,
-                            'qty_inpeg' => $no_peg,
+                            'qty_inpeg' => intval($no_peg),
                             //'btl_selling_price' => $btl_selling_price,
                             //'peg_selling_price' =>$peg_selling_price,
-                            'rate' => $pegprice,
+                            // 'rate' => $pegprice,
+                            // 'amount' => $amount
+                            'rate' => $rate,
                             'amount' => $amount
                         );
     
@@ -1381,7 +1402,7 @@ class Reports extends Controller
                         $openSum = $openSum + $open;
                         // current year opening section end
                         //current year purchase section
-                        [$purchase] = purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+                        [$purchase] = purchase::where(['brand_id' => $brand['id'], 'compa4ny_id' => $company_id])
                             ->whereMonth('invoice_date', $newMonth[0])
                             ->whereYear('invoice_date', $newMonth[1])
                             ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))

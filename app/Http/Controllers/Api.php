@@ -835,19 +835,38 @@ class Api extends Controller
         foreach ($brands as $key => $brand) {
             $brandSize = Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->get()->count();
             if ($brandSize > 0) {
+                $brand_bottle_and_peg_size = Brand::select('btl_size','peg_size')->where('id',$brand)->first();
+
+                $peg_selling_price = 0;
+                if(!empty($brand_bottle_and_peg_size)){
+                    $btl_size = $brand_bottle_and_peg_size->btl_size;
+                    $peg_size = $brand_bottle_and_peg_size->peg_size;
+                    $bottle_selling_price = $btl_sell[$key];
+                    $peg_selling_price = $bottle_selling_price/($btl_size/$peg_size);
+                }
                 // update existing entry
-                Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['cost_price' => $cost[$key], 'btl_selling_price' => $btl_sell[$key]]);
+                Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['cost_price' => $cost[$key], 'btl_selling_price' => $btl_sell[$key], 'peg_selling_price' => intval($peg_selling_price)]);
                 $isSaved = true;
                 $total++;
             } else {
-                $brandData = Brand::select('category_id')->where('id', $brand)->get()->first();
+                $brandData = Brand::select('category_id','btl_size','peg_size')->where('id', $brand)->get()->first();
                 $data['category_id'] = $brandData['category_id'];
                 $data['company_id'] = $request->company_id;
                 $data['qty'] = 0;
                 $data['physical_closing'] = 0;
                 $data['brand_id'] = $brand;
                 $data['cost_price'] = $cost[$key];
+
+                $peg_selling_price = 0;
+                if(!empty($brand_bottle_and_peg_size)){
+                    $btl_size = $brand_bottle_and_peg_size->btl_size;
+                    $peg_size = $brand_bottle_and_peg_size->peg_size;
+                    $bottle_selling_price = $btl_sell[$key];
+                    $peg_selling_price = $bottle_selling_price/($btl_size/$peg_size);
+                }
+
                 $data['btl_selling_price'] = $btl_sell[$key];
+                $data['peg_selling_price'] = intval($peg_selling_price);
                 $save = new Stock($data);
                 if ($save->save()) {
                     $isSaved = true;
@@ -2430,6 +2449,8 @@ class Api extends Controller
                                 $sales_data['category_id'] = $brandData['category_id'];
                                 $sales_data['brand_id'] = $brandData['brand_id'];
                                 $sales_data['sales_type'] = $type;
+                                $sales_data['created_by'] = $request->user()->id;
+                                $sales_data['sale_date'] = date('Y-m-d', strtotime($request->invoice_date));
                                 $sales_data['description'] = $brand . ' recipe sale';
 
                                 $fetch = Sales::where(['sales_main_id' => $request->main_id, 'recipe_id' => $brandData['id'],'brand_id' => $brandData['brand_id']])->first();
@@ -2496,11 +2517,14 @@ class Api extends Controller
                                     $sales_data['brand_id'] = $brandData['brand_id'];
                                     $sales_data['sales_type'] = $sales_type[$key];
                                     $sales_data['category_id'] = $category_id[$key];
+                                    $sales_data['qty'] = $qty;
                                     $sales_data['no_peg'] = $peg;
                                     $sales_data['no_btl'] = $btl;
                                     $sales_data['recipe_id'] = $brandData['id'];
                                     $sales_data['liquor_or_recipe'] = 'recipe';
                                     $sales_data['description'] = $brand . ' recipe sale';
+                                    $sales_data['created_by'] = $request->user()->id;
+                                    $sales_data['sale_date'] = date('Y-m-d', strtotime($request->invoice_date));
     
                                     $Sales = new Sales($sales_data);
                                     if ($Sales->save()) {
@@ -2536,6 +2560,7 @@ class Api extends Controller
                         $sales_data = [];
             
                         $sales_data['brand_id'] = $brand;
+                        $sales_data['qty'] = $qty;
                         $sales_data['no_btl'] = $no_btl[$key];
                         $sales_data['no_peg'] = $no_peg[$key];
                         $sales_data['sales_type'] = $sales_type[$key];
@@ -2571,6 +2596,8 @@ class Api extends Controller
                             $sales_data['qty'] = $MlSize;
                             $sales_data['no_btl'] = $no_btl[$key];
                             $sales_data['no_peg'] = $no_peg[$key];
+                            $sales_data['created_by'] = $request->user()->id;
+                            $sales_data['sale_date'] = date('Y-m-d', strtotime($request->invoice_date));
                             $Sales = new Sales($sales_data);
                             if ($Sales->save()) {
                                 //update stocks
@@ -2650,6 +2677,7 @@ class Api extends Controller
                     $res[$i]['brandsData'] = [];
                     if(!empty($brands_data)){
                         foreach($brands_data as $bKey => $bval){
+                            $res[$i]['brandsData'][$bKey]['name'] = $bval->name;
                             $res[$i]['brandsData'][$bKey]['brand_name'] = $bval->name;
                             $res[$i]['brandsData'][$bKey]['serving_size'] = $bval->serving_size;
                             $res[$i]['brandsData'][$bKey]['peg_size'] = $bval->peg_size;
@@ -3205,7 +3233,7 @@ class Api extends Controller
                 $brands = Brand::select('id as brand_id', 'category_id')->where(['name' => $name, 'status' => 1])->get();
     
                 if (count($brands) < 1) {
-                    $brands = Recipe::select('recipe_code', 'brand_id', 'serving_size', 'category_id', 'is_cocktail')->where(['name' => $name, 'company_id' => $data['company_id'], 'status' => 1])->get();
+                    $brands = Recipe::select('id as recipe_id','recipe_code', 'brand_id', 'serving_size', 'category_id', 'is_cocktail')->where(['name' => $name, 'company_id' => $data['company_id'], 'status' => 1])->get();
                     if (count($brands) < 1) {
                         $dataAr['reason'] = 'Brand Not Found';
                         array_push($failed_data, $dataAr);
@@ -3227,7 +3255,6 @@ class Api extends Controller
                         if ($stock->qty > 0) {
                             $data['created_by'] = $request->user()->id;
                             // $data['description'] = ' brand id ' . $brand_id . ' sales entry has been done from bulk import by ' . $request->user()->id;
-                            $data['description'] = 'liquor sale';
                             $MlSize = 0;
                             $MlSize1 = 0;
                             $MlSize2 = 0;
@@ -3240,9 +3267,12 @@ class Api extends Controller
                                 $MlSize = ($brand['serving_size'] * $dataAr['sale']);
                                 $data['qty'] = $MlSize;
                                 $data['sales_type'] = 1;
-                                $result = getBtlPeg($brand_id, $MlSize);
+                                $result = getBtlPegForRecipe($brand_id, $MlSize);
                                 $data['no_btl'] = $result['btl'];
                                 $data['no_peg'] = $result['peg'];
+                                $data['liquor_or_recipe'] = 'recipe';
+                                $data['recipe_id'] = $brand->recipe_id;
+                                $data['description'] = $brand->recipe_code . ' recipe sale';
                                 $Sales = new Sales($data);
         
                                 if ($Sales->save()) {
@@ -3255,9 +3285,12 @@ class Api extends Controller
                                         $MlSize1 = ($brand['serving_size'] * $data['sale']);
                                         $data['qty'] = $MlSize1;
                                         $data['sales_type'] = 2;
-                                        $result = getBtlPeg($brand_id, $MlSize1);
+                                        $result = getBtlPegForRecipe($brand_id, $MlSize1);
                                         $data['no_btl'] = $result['btl'];
                                         $data['no_peg'] = $result['peg'];
+                                        $data['liquor_or_recipe'] = 'recipe';
+                                        $data['recipe_id'] = $brand->recipe_id;
+                                        $data['description'] = $brand->recipe_code . ' recipe sale';
                                         $Sales = new Sales($data);
                                         $Sales->save();
                                     }
@@ -3269,9 +3302,12 @@ class Api extends Controller
                                         $MlSize2 = ($brand['serving_size'] * $data['sale']);
                                         $data['qty'] = $MlSize2;
                                         $data['sales_type'] = 3;
-                                        $result = getBtlPeg($brand_id, $MlSize2);
+                                        $result = getBtlPegForRecipe($brand_id, $MlSize2);
                                         $data['no_btl'] = $result['btl'];
                                         $data['no_peg'] = $result['peg'];
+                                        $data['liquor_or_recipe'] = 'recipe';
+                                        $data['recipe_id'] = $brand->recipe_id;
+                                        $data['description'] = $brand->recipe_code . ' recipe sale';
                                         $Sales = new Sales($data);
                                         $Sales->save();
                                     }
@@ -3283,9 +3319,12 @@ class Api extends Controller
                                         $MlSize2 = ($brand['serving_size'] * $data['sale']);
                                         $data['qty'] = $MlSize2;
                                         $data['sales_type'] = 4;
-                                        $result = getBtlPeg($brand_id, $MlSize2);
+                                        $result = getBtlPegForRecipe($brand_id, $MlSize2);
                                         $data['no_btl'] = $result['btl'];
                                         $data['no_peg'] = $result['peg'];
+                                        $data['liquor_or_recipe'] = 'recipe';
+                                        $data['recipe_id'] = $brand->recipe_id;
+                                        $data['description'] = $brand->recipe_code . ' recipe sale';
                                         $Sales = new Sales($data);
                                         $Sales->save();
                                     }
@@ -3316,6 +3355,8 @@ class Api extends Controller
                                 $success = true;
                                 $data['no_btl'] = $saleAr1;
                                 $data['no_peg'] = $saleAr2;
+                                $data['liquor_or_recipe'] = 'liquor';
+                                $data['description'] = 'liquor sale';
                                 $Sales = new Sales($data);
         
                                 if ($Sales->save()) {
@@ -3327,6 +3368,8 @@ class Api extends Controller
                                         $data['no_btl'] = $nc1;
                                         $data['no_peg'] = $nc2;
                                         $data['sales_main_id'] = $SalesMain->id;
+                                        $data['liquor_or_recipe'] = 'liquor';
+                                        $data['description'] = 'liquor sale';
                                         $Sales = new Sales($data);
                                         $Sales->save();
                                     }
@@ -3338,6 +3381,8 @@ class Api extends Controller
                                         $data['no_btl'] = $banAr1;
                                         $data['no_peg'] = $banAr2;
                                         $data['sales_main_id'] = $SalesMain->id;
+                                        $data['liquor_or_recipe'] = 'liquor';
+                                        $data['description'] = 'liquor sale';
                                         $Sales = new Sales($data);
                                         $Sales->save();
                                     }
@@ -3349,6 +3394,8 @@ class Api extends Controller
                                         $data['no_btl'] = $spoAr1;
                                         $data['no_peg'] = $spoAr2;
                                         $data['sales_main_id'] = $SalesMain->id;
+                                        $data['liquor_or_recipe'] = 'liquor';
+                                        $data['description'] = 'liquor sale';
                                         $Sales = new Sales($data);
                                         $Sales->save();
                                     }
@@ -3582,7 +3629,7 @@ class Api extends Controller
                         if ($brands_in_recipe->isNotEmpty()) {
                             foreach ($brands_in_recipe as $brandKey => $brandValue) {
 
-                                $peg_qty = ($value['no_peg'] * $brandValue['serving_size']) / $brandValue['peg_size'];
+                                $peg_qty = ($value['glass_qty'] * $brandValue->serving_size) / $brandValue->peg_size;
 
 
                                 $value['brands'][] = [
