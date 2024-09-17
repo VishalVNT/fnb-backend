@@ -657,7 +657,16 @@ class Reports extends Controller
                 $btlSize = $row->btl_size;
                 $quantity = $row->qty;
                 $rate = $row->mrp;
-                $amount = $row->mrp * $row->no_btl;
+
+                if($rate == 0 || $rate == ''){
+                    $rateDetails = DB::table('stocks')->where('company_id', $request->company_id)->where('brand_id', $row->brand_id)->select('btl_selling_price')->orderBy('id','desc')->first();
+                    if(!empty($rateDetails)){
+                        $rate = $rateDetails->btl_selling_price;
+                    }else{
+                        $rate = 0;
+                    }
+                }
+                $amount = $rate * $row->no_btl;
                 $vendor_name = $row->vendor_name;
                 $brand_id = $row->brand_id;
     
@@ -728,6 +737,8 @@ class Reports extends Controller
                 
                 if(!empty($rateDataFromStocks)){
                     $rate = $rateDataFromStocks->peg_selling_price;
+                }else{
+                    $rate = 0;
                 }
                 
                 //	$data  = getrateamount($brandId);
@@ -801,19 +812,14 @@ class Reports extends Controller
     {
         $json = [];
         $company_id = $request->company_id;
-        $categories = Category::select('id', 'name')->get();
+        $categories = Category::where('status', 1)->select('id', 'name')->get();
         $cat_array = array();
-
 
         foreach ($categories as $category) {
             $name = $category->name;
             $id = $category->id;
-            $categoryOpeningBalance = 0;
-            $categoryPurchase = 0;
-            $categoryTotal = 0;
-            $categorySales = 0;
-            $categoryClosingBalance = 0;
-            $catReset = 0;
+            $categoryData = [];
+
             $stockData = DB::table('stocks')
                 ->where('category_id', $id)
                 ->where('company_id', $company_id)
@@ -823,75 +829,41 @@ class Reports extends Controller
 
             foreach ($stockData as $stock) {
                 $brandId = $stock->brand_id;
-
-                $cat = array(
-                    'category_name' => $name,
-                    'brand_name' => '',
-                    'btl_size' => '',
-                    'opening_balance' => '',
-                    'purchase' => '',
-                    'total' => '',
-                    'sales' => '',
-                    'closing_balance' => ''
-                );
-
-
-                [$data_daily_opening] = DB::table('daily_openings')
-                    ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-                    ->where('company_id', $company_id)
-                    ->where('brand_id', $brandId)
-                    ->get();
-                $opening_qty = !empty($data_daily_opening->qty) ? $data_daily_opening->qty : '0';
-
-                $data_purchase = DB::table('purchases')
-                    ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-                    ->where('brand_id', $brandId)
-                    ->where('company_id', $company_id)
-                    ->first();
-                $purchase_qty = !empty($data_purchase->qty) ? $data_purchase->qty : 0;
-
-                $data_sales = DB::table('sales')
-                    ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-                    ->where('brand_id', $brandId)
-                    ->where('company_id', $company_id)
-                    ->first();
-                $sales_qty = !empty($data_sales->qty) ? $data_sales->qty : 0;
-
-                $brandDetails = DB::table('brands')
-                    ->where('id', $brandId)
-                    ->first();
+                $brandDetails = DB::table('brands')->where('id', $brandId)->first();
 
                 if ($brandDetails) {
-                    $catReset = 1;
-                    if (!in_array($name, $cat_array)) {
-                        array_push($json, $cat);
-                    }
-                    array_push($cat_array, $name);
-
                     $btl_size = $brandDetails->btl_size;
-                    $peg_size = $brandDetails->peg_size;
 
-                    $opening_stock = convertBtlPeg($opening_qty, $btl_size, $peg_size);
+                    // Initialize or increment values for each bottle size
+                    if (!isset($categoryData[$btl_size])) {
+                        $categoryData[$btl_size] = [
+                            'category_name' => $name,
+                            'brands' => [],
+                            'opening_balance' => 0,
+                            'purchase' => 0,
+                            'total' => 0,
+                            'sales' => 0,
+                            'closing_balance' => 0,
+                        ];
+                    }
+
+                    $opening_qty = $this->getOpeningQty($company_id, $brandId);
+                    $purchase_qty = $this->getPurchaseQty($company_id, $brandId);
+                    $sales_qty = $this->getSalesQty($company_id, $brandId);
+
+                    $opening_stock = convertBtlPeg($opening_qty, $btl_size, $brandDetails->peg_size);
+                    $purchase_stock = convertBtlPeg($purchase_qty, $btl_size, $brandDetails->peg_size);
+                    $sales_stock = convertBtlPeg($sales_qty, $btl_size, $brandDetails->peg_size);
+
                     $opening_balance = $opening_stock['btl'] . "." . $opening_stock['peg'];
-
-                    $purchase_stock = convertBtlPeg($purchase_qty, $btl_size, $peg_size);
                     $purchase = $purchase_stock['btl'] . "." . $purchase_stock['peg'];
-
-                    $sales_stock = convertBtlPeg($sales_qty, $btl_size, $peg_size);
                     $sales = $sales_stock['btl'] . "." . $sales_stock['peg'];
 
                     $total = floatval($opening_balance) + floatval($purchase);
-
                     $closing_balance = floatval($total) - floatval($sales);
 
-                    $categoryOpeningBalance += floatval($opening_balance);
-                    $categoryPurchase += floatval($purchase);
-                    $categoryTotal += floatval($total);
-                    $categorySales += floatval($sales);
-                    $categoryClosingBalance += floatval($closing_balance);
-
-
-                    $brand = array(
+                    // Update the brand details
+                    $brand = [
                         'category_name' => '',
                         'brand_name' => $brandDetails->name,
                         'btl_size' => $btl_size,
@@ -899,27 +871,84 @@ class Reports extends Controller
                         'purchase' => $purchase,
                         'total' => $total,
                         'sales' => $sales,
-                        'closing_balance' => $closing_balance
-                    );
+                        'closing_balance' => $closing_balance,
+                    ];
 
-                    array_push($json, $brand);
+                    // Push brand to the array
+                    $categoryData[$btl_size]['brands'][] = $brand;
+
+                    // Update subtotals
+                    $categoryData[$btl_size]['opening_balance'] += floatval($opening_balance);
+                    $categoryData[$btl_size]['purchase'] += floatval($purchase);
+                    $categoryData[$btl_size]['total'] += floatval($total);
+                    $categoryData[$btl_size]['sales'] += floatval($sales);
+                    $categoryData[$btl_size]['closing_balance'] += floatval($closing_balance);
                 }
             }
-            if ($catReset > 0) {
-                $brand = array(
+
+            // Add the subtotal for each bottle size
+            foreach ($categoryData as $btl_size => $data) {
+                // Push category row if not added
+                if (!in_array($data['category_name'], $cat_array)) {
+                    array_push($json, [
+                        'category_name' => $data['category_name'],
+                        'brand_name' => '',
+                        'btl_size' => '',
+                        'opening_balance' => '',
+                        'purchase' => '',
+                        'total' => '',
+                        'sales' => '',
+                        'closing_balance' => ''
+                    ]);
+                    array_push($cat_array, $data['category_name']);
+                }
+
+                // Push all brand data
+                foreach ($data['brands'] as $brand) {
+                    array_push($json, $brand);
+                }
+
+                // Push subtotal for current bottle size
+                array_push($json, [
                     'category_name' => '',
-                    'brand_name' => 'SUBTOTAL',
+                    'brand_name' => 'SUBTOTAL (' . $btl_size . 'ml)',
                     'btl_size' => $btl_size,
-                    'opening_balance' => $categoryOpeningBalance,
-                    'purchase' => $categoryPurchase,
-                    'total' => $categoryTotal,
-                    'sales' => $categorySales,
-                    'closing_balance' => $categoryClosingBalance,
-                );
-                array_push($json, $brand);
+                    'opening_balance' => $data['opening_balance'],
+                    'purchase' => $data['purchase'],
+                    'total' => $data['total'],
+                    'sales' => $data['sales'],
+                    'closing_balance' => $data['closing_balance'],
+                ]);
             }
         }
         return json_encode($json);
+    }
+
+    private function getOpeningQty($company_id, $brandId)
+    {
+        return DB::table('daily_openings')
+            ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
+            ->where('company_id', $company_id)
+            ->where('brand_id', $brandId)
+            ->value('qty') ?: 0;
+    }
+
+    private function getPurchaseQty($company_id, $brandId)
+    {
+        return DB::table('purchases')
+            ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
+            ->where('brand_id', $brandId)
+            ->where('company_id', $company_id)
+            ->value('qty') ?: 0;
+    }
+
+    private function getSalesQty($company_id, $brandId)
+    {
+        return DB::table('sales')
+            ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
+            ->where('brand_id', $brandId)
+            ->where('company_id', $company_id)
+            ->value('qty') ?: 0;
     }
 
 
@@ -990,93 +1019,127 @@ class Reports extends Controller
         return response()->json($json);
     }
 
-   public function AbstractReport(Request $request)
+    public function AbstractReport(Request $request)
     {
         $json = [];
         $data = [];
         $from_date = $request->from_date;
         $to_date = $request->to_date;
         $company_id = $request->company_id;
-        
-         $btlSizes = Brand::distinct()
-        ->orderBy('btl_size', 'DESC')
-        ->pluck('btl_size')
-        ->toArray();
 
+        $btlSizes = Brand::distinct()
+            ->orderBy('btl_size', 'DESC')
+            ->pluck('btl_size')
+            ->toArray();
 
         $categories = Category::where(['status' => 1])->get();
         foreach ($categories as $key => $category) {
-            $btls = Brand::where(['category_id' => $category->id])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))->get();
+            $btls = Brand::where(['category_id' => $category->id])
+                ->orderBy('btl_size', 'DESC')
+                ->groupBy(DB::raw("btl_size"))
+                ->get();
+
             foreach ($btls as $key2 => $btl_size) {
                 $brands = DB::table('brands')
-                    ->join('purchases', 'purchases.brand_id', '=', 'brands.id')
-                    ->select('brands.*', 'purchases.invoice_no', 'purchases.invoice_date', 'purchases.no_btl')
-                    ->where('purchases.category_id', '=', $category->id)
-                    ->where('purchases.company_id', $company_id)
-                    ->where('brands.btl_size', '=', $btl_size->btl_size)
-                    ->whereDate('purchases.invoice_date', '>=', $from_date)
-                    ->whereDate('purchases.invoice_date', '<=', $to_date)
-                    ->orderBy('brands.btl_size', 'DESC')
-                    ->get();
+                        ->join('purchases', 'purchases.brand_id', '=', 'brands.id')
+                        ->join('categories', 'categories.id', '=', 'purchases.category_id')
+                        ->select('brands.*', 'purchases.invoice_no', 'purchases.invoice_date', 'purchases.no_btl')
+                        ->where('categories.status', 1)
+                        ->where('purchases.status', 1)
+                        ->where('brands.status', 1)
+                        ->where('purchases.category_id', '=', $category->id)
+                        ->where('purchases.company_id', $company_id)
+                        ->where('brands.btl_size', '=', $btl_size->btl_size)
+                        ->whereDate('purchases.invoice_date', '>=', $from_date)
+                        ->whereDate('purchases.invoice_date', '<=', $to_date)
+                        ->where('categories.status', 1)
+                        ->orderBy('brands.btl_size', 'DESC')
+                        ->get();
 
                 foreach ($brands as $key3 => $brand) {
-              
-                    $btl_size =  $brand->btl_size;
-                    $no_btl  =  $brand->no_btl;
+                    $btl_size = $brand->btl_size;
+                    $no_btl  = $brand->no_btl;
                     $invoice_no = $brand->invoice_no;
-                    
-                   
-                    
 
                     if (!isset($data[$invoice_no])) {
                         $data[$invoice_no] = [];
                     }
-                    
-                    foreach ($categories as $cat)
-                    {
+
+                    foreach ($categories as $cat) {
                         foreach ($btlSizes as $size) {
-                        
                             if (!isset($data[$invoice_no][$cat->name . '-' . $size])) {
                                 $data[$invoice_no][$cat->name . '-' . $size] = 0;
-                            } 
-                       
-                        } 
+                            }
+                        }
                     }
-                    
-                    /* foreach ($btlSizes as $size) {
-                        
-                        if (!isset($data[$invoice_no][$category->name . '-' . $size])) {
-                            $data[$invoice_no][$category->name . '-' . $size] = 0;
-                        } 
-                   
-                    }  */
-                    
+
                     $data[$invoice_no][$category->name . '-' . $btl_size] += $no_btl;
-                  // $data[$invoice_no][$cat->name . '-' . $btl_size] += $no_btl;
                 }
-                
             }
-            
         }
-      
-        $total = [];
+
+        // Filter out btl_size categories that have all 0 values across invoices
+        $filteredData = [];
         foreach ($data as $invoice_no => $values) {
-            $entry = ['TP No.' => $invoice_no] + $values;
-            array_push($json, $entry);
-
             foreach ($values as $key => $value) {
-                if (!isset($total[$key])) {
-                    $total[$key] = 0;
+                if (!isset($filteredData[$key])) {
+                    $filteredData[$key] = 0;
                 }
-                $total[$key] += $value;
+                $filteredData[$key] += $value;
             }
         }
 
-        $totalEntry = ['TP No.' => 'Total'] + $total;
+        foreach ($data as $invoice_no => $values) {
+            foreach ($values as $key => $value) {
+                if ($filteredData[$key] === 0) {
+                    unset($values[$key]); // Remove this btl_size for this invoice_no if it's all zero
+                }
+            }
+
+            // Check if the row has at least one value greater than 0
+            $hasNonZeroValue = false;
+            foreach ($values as $key => $value) {
+                if ($value > 0) {
+                    $hasNonZeroValue = true;
+                    break;
+                }
+            }
+
+            // If the row has any non-zero values, add it to $json
+            if ($hasNonZeroValue) {
+                // Replace 0 quantities with a blank string
+                $entry = ['TP No.' => $invoice_no];
+                foreach ($values as $key => $value) {
+                    $entry[$key] = $value === 0 ? '' : $value; // Replace 0 with an empty string
+                }
+                array_push($json, $entry);
+            }
+        }
+
+        $total = [];
+        foreach ($json as $invoice) {
+            foreach ($invoice as $key => $value) {
+                if ($key !== 'TP No.') {
+                    if (!isset($total[$key])) {
+                        $total[$key] = 0;
+                    }
+                    $total[$key] += (int)$value;
+                }
+            }
+        }
+
+        // Replace 0 quantities in the total row with blank string
+        $totalEntry = ['TP No.' => 'Total'];
+        foreach ($total as $key => $value) {
+            $totalEntry[$key] = $value === 0 ? '' : $value; // Replace 0 with an empty string
+        }
         array_push($json, $totalEntry);
 
         return response()->json($json);
     }
+
+
+    
     public function MonthlyReport(Request $request)
     {
         $json = [];

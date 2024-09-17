@@ -1491,9 +1491,9 @@ class Api extends Controller
         $dateTime2 = new DateTime($request->date2);
         $date2 = $dateTime2->format('Y-m-d');
         if ($request->isInvoice == 0)
-            $data = PurchaseList::where(['status' => 1, 'isInvoice' => 0, 'company_id' => $request->company_id])->orderBy('id', 'DESC');
+            $data = PurchaseList::where(['status' => 1, 'isInvoice' => 0, 'company_id' => $request->company_id])->where('status',1)->orderBy('id', 'DESC');
         else
-            $data = PurchaseList::where(['status' => 1, 'isInvoice' => 1, 'company_id' => $request->company_id])->orderBy('id', 'DESC');
+            $data = PurchaseList::where(['status' => 1, 'isInvoice' => 1, 'company_id' => $request->company_id])->where('status',1)->orderBy('id', 'DESC');
         if (!empty($request->keyword))
             $data->where('invoice_no', 'like', '%' . $request->keyword . '%');
         if (!empty($request->date2)) {
@@ -1502,8 +1502,20 @@ class Api extends Controller
         }
         $data = $data->get();
 
-        if ($data) {
-            return response()->json($data);
+        $purchaseData = [];
+
+        if(!empty($data)){
+            foreach($data as $key => $value){
+                $checkforCategoryActiveOrNot = Purchase::where('purchase_list_id',$value->id)->join('categories', 'categories.id', '=', 'purchases.category_id')->where('purchases.status', 1)->where('purchases.is_deleted',0)->where('categories.status', 1)->where('categories.is_deleted',0)->count();
+                if($checkforCategoryActiveOrNot > 0){
+                    $value->total_item = $checkforCategoryActiveOrNot;
+                    array_push($purchaseData, $value);
+                }
+            }
+        }
+
+        if ($purchaseData) {
+            return response()->json($purchaseData);
         } else {
             return response()->json([
                 'message' => 'Oops! operation failed!',
@@ -2221,7 +2233,7 @@ class Api extends Controller
     }
     public function getAllBrandOption(Request $request)
     {
-        $brands = Brand::select('brands.name as value', 'brands.id', 'brands.category_id', DB::raw('CONCAT(brands.id," - ",brands.name," - ",brands.btl_size) as label'),'subcategories.name as subcategory_name', DB::raw('0 as recipe'))->join('subcategories','subcategories.id', '=','brands.subcategory_id')->where(['brands.status' => 1])->get();
+        $brands = Brand::select('brands.name as value', 'brands.id', 'brands.category_id', DB::raw('CONCAT(brands.id," - ",brands.name," - ",brands.btl_size) as label'),'subcategories.name as subcategory_name', DB::raw('0 as recipe'))->join('subcategories','subcategories.id', '=','brands.subcategory_id')->join('categories','brands.category_id','=','categories.id')->where(['brands.status' => 1,'subcategories.status' => 1,'categories.status' => 1])->get();
         if ($brands) {
             return response()->json($brands);
         } else {
@@ -2234,7 +2246,7 @@ class Api extends Controller
     public function getAllBrandSales(Request $request)
     {
         $dataArray = array();
-        $brands = Brand::select('brands.name as value','btl_size as size', DB::raw('CONCAT(brands.id," - ",brands.name," - ",btl_size) as label'), 'brands.id', 'brands.category_id','brands.subcategory_id','subcategories.name as subcategory_name', DB::raw('0 as recipe'))->join('stocks', 'stocks.brand_id', '=', 'brands.id')->join('subcategories','subcategories.id', '=','brands.subcategory_id')->where(['brands.status' => 1, 'stocks.company_id' => $request->company_id, ['stocks.qty', '>', 0]])->groupBy('brands.id')->get();
+        $brands = Brand::select('brands.name as value','btl_size as size', DB::raw('CONCAT(brands.id," - ",brands.name," - ",btl_size) as label'), 'brands.id', 'brands.category_id','brands.subcategory_id','subcategories.name as subcategory_name', DB::raw('0 as recipe'))->join('stocks', 'stocks.brand_id', '=', 'brands.id')->join('subcategories','subcategories.id', '=','brands.subcategory_id')->join('categories','brands.category_id','=','categories.id')->where(['brands.status' => 1,'subcategories.status' => 1,'categories.status' => 1, 'stocks.company_id' => $request->company_id, ['stocks.qty', '>', 0]])->groupBy('brands.id')->get();
         if ($brands) {
             foreach ($brands as $brand) {
                 array_push($dataArray, $brand);
@@ -3831,7 +3843,7 @@ class Api extends Controller
     }
     public function fetchPurchaseData(Request $request)
     {
-        $data = Purchase::select('brands.name', 'purchases.*','suppliers.name as supplier_name')->join('suppliers','suppliers.id','=','purchases.vendor_id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->where(['purchases.status' => 1, 'purchases.purchase_list_id' => $request->id])->orderBy('id', 'DESC')->get();
+        $data = Purchase::select('brands.name', 'purchases.*','suppliers.name as supplier_name')->join('suppliers','suppliers.id','=','purchases.vendor_id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->join('categories', 'categories.id', '=', 'purchases.category_id')->where(['purchases.status' => 1, 'purchases.purchase_list_id' => $request->id, 'categories.status' => 1])->orderBy('id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
