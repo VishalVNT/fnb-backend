@@ -681,6 +681,8 @@ class Api extends Controller
         $Bar2Peg = explode(',', $request->Bar2Peg);
         $isSaved = false;
         $total = 0;
+        $date = date('Y-m-d');
+        $openingDate = !empty($request->openingDate) ? date('Y-m-d', strtotime($request->openingDate)) : date('Y-m-d');
         foreach ($brands as $key => $brand) {
             $brandSize = Brand::select('btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
             if (isset($brandSize)) {
@@ -707,12 +709,25 @@ class Api extends Controller
                     $opening['bar2_btl'] = $Bar2Btl[$key];
                     $opening['bar2_peg'] = $Bar2Peg[$key];
                     $opening['date'] = !empty($request->openingDate) ? date('Y-m-d', strtotime($request->openingDate)) : date('Y-m-d');
-                    $saveOpening = new DailyOpening($opening);
-                    $saveOpening->save();
-                    $total++;
+                    $saveOpening = DailyOpening::create($opening);
+                    // $saveOpening->save();
 
-                    // DailyOpening::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize]);
-                    $isSaved = true;
+                    if(!empty($saveOpening)){
+                        $logData = [];
+                        $logData['company_id'] = $request->company_id;
+                        $logData['brand_id'] = (int)$brand;
+                        $logData['transaction_type'] = 'credit';
+                        $logData['transaction_category'] = 'opening';
+                        $logData['transaction_category_table_id'] = $saveOpening->id;
+                        $logData['qty'] = $MlSize;
+                        $logData['log_date'] = $openingDate;
+
+                        $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+                        $total++;
+    
+                        // DailyOpening::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize]);
+                        $isSaved = true;
+                    }
                 } else {
                     // add new stock
                     $stock = new Stock(array(
@@ -734,8 +749,21 @@ class Api extends Controller
                     $opening['bar2_btl'] = $Bar2Btl[$key];
                     $opening['bar2_peg'] = $Bar2Peg[$key];
                     $opening['date'] = !empty($request->openingDate) ? date('Y-m-d', strtotime($request->openingDate)) : date('Y-m-d');
-                    $saveOpening = new DailyOpening($opening);
-                    $saveOpening->save();
+                    $saveOpening = DailyOpening::create($opening);
+
+                    if($saveOpening){
+                        $logData = [];
+                        $logData['company_id'] = $request->company_id;
+                        $logData['brand_id'] = (int)$brand;
+                        $logData['transaction_type'] = 'credit';
+                        $logData['transaction_category'] = 'opening';
+                        $logData['transaction_category_table_id'] = $saveOpening->id;
+                        $logData['qty'] = $MlSize;
+
+                        $logData['log_date'] = date('Y-m-d', strtotime($request->openingDate));
+
+                        $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+                    }
                     $total++;
                 }
             }
@@ -959,6 +987,8 @@ class Api extends Controller
         $sales_main_data['company_id'] = $request->company_id;
         $sales_main_data['created_by'] = $request->user()->id;
         $SalesMain = new SalesMain($sales_main_data);
+        $date = date('Y-m-d');
+        $salesDate = !empty($request->created_at) ? date('Y-m-d', strtotime($request->created_at)) : date('Y-m-d');
 
         if($SalesMain->save()){
 
@@ -1013,8 +1043,20 @@ class Api extends Controller
                         $data['no_btl'] = $no_btl[$key];
                         $data['no_peg'] = $no_peg[$key];
                         $data['description'] = 'liquor sale';
-                        $Sales = new Sales($data);
-                        if ($Sales->save()) {
+                        $Sales = Sales::create($data);
+                        if (!empty($Sales)) {
+
+                            $logData = [];
+                            $logData['company_id'] = $request->company_id;
+                            $logData['brand_id'] = (int)$brand;
+                            $logData['transaction_type'] = 'debit';
+                            $logData['transaction_category'] = 'sale';
+                            $logData['transaction_category_table_id'] = $Sales->id;
+                            $logData['qty'] = $MlSize;
+                            $logData['log_date'] = $salesDate;
+
+                            $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+                            
                             //update stocks
                             Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->decrement('qty', $MlSize);
                             // logs
@@ -1065,8 +1107,21 @@ class Api extends Controller
                                 $data['created_by'] = $request->user()->id;
                                 $data['sales_type'] = $type;
                                 $data['description'] = $recipe . ' recipe sale';
-                                $Sales = new Sales($data);
-                                if ($Sales->save()) {
+                                $Sales = Sales::create($data);
+                                if (!empty($Sales)) {
+
+                                    $logData = [];
+                                    $logData['company_id'] = $request->company_id;
+                                    $logData['brand_id'] = (int)$brand['brand_id'];
+                                    $logData['transaction_type'] = 'debit';
+                                    $logData['transaction_category'] = 'sale';
+                                    $logData['transaction_category_table_id'] = $Sales->id;
+                                    $logData['qty'] = $MlSize;
+                                    $logData['log_date'] = $salesDate;
+        
+                                    $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+
+
                                     $counter++;
                                     $saved = true;
                                     Stock::where(['company_id' => $data['company_id'], 'brand_id' => $brand['brand_id']])->decrement('qty', $data['qty']);
@@ -1844,6 +1899,25 @@ class Api extends Controller
             'id' => 'required'
         ]);
         $daily = DailyOpening::where(['id' => $data['id'], 'status' => 1])->get()->first();
+
+        $rowData = DB::table('daily_opening_closing_log')->where('company_id',$daily->company_id)->where('transaction_type', 'credit')->where('transaction_category','opening')->where('transaction_category_table_id', $data['id'])->orderBy('id', 'desc')->first();
+
+        if(!empty($rowData)){
+            // debit this stock qty from table
+
+            $deleteLogData = [];
+            $deleteLogData['company_id'] = $rowData->company_id;
+            $deleteLogData['brand_id'] = $rowData->brand_id;
+            $deleteLogData['transaction_type'] = 'debit';
+            $deleteLogData['transaction_category'] = 'opening';
+            $deleteLogData['transaction_category_table_id'] = $data['id'];
+            $deleteLogData['updated_transaction_category_table_id'] = $rowData->id;
+            $deleteLogData['qty'] = $rowData->qty;
+            $deleteLogData['log_date'] = $rowData->log_date;
+
+            $insertOldLog = DB::table('daily_opening_closing_log')->insert($deleteLogData);
+        }
+
         Stock::where(['company_id' => $daily['company_id'], 'brand_id' => $daily['brand_id']])->decrement('qty', intval($daily['qty']));
         $res = DailyOpening::where('id', $data['id'])->update(['status' => 0]);
         if ($res) {
@@ -1900,6 +1974,8 @@ class Api extends Controller
         $data['total_item'] = count($brand);
         $data['isInvoice'] = $request->isInvoice;
         $purchase_save = PurchaseList::create($data);
+        $date = date('Y-m-d');
+        $purchaseDate = !empty($request->invoice_date) ? date('Y-m-d', strtotime($request->invoice_date)) : date('Y-m-d');
         // $purchase_save = $purchase->save();
         if($purchase_save){
             foreach ($brand as $key => $item) {
@@ -1911,8 +1987,22 @@ class Api extends Controller
                 $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
                 $data['qty'] = $MlSize;
                 $data['category_id'] = $brandSize[0]['category_id'];
-                $save = new purchase($data);
-                if ($save->save()) {
+                $save = purchase::create($data);
+
+                if(!empty($save)){
+
+                    $logData = [];
+                    $logData['company_id'] = $request->company_id;
+                    $logData['brand_id'] = (int)$item;
+                    $logData['transaction_type'] = 'credit';
+                    $logData['transaction_category'] = 'purchase';
+                    $logData['transaction_category_table_id'] = $save->id;
+                    $logData['qty'] = $MlSize;
+
+                    $logData['log_date'] = $purchaseDate;
+
+                    $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+
                     $isSaved = true;
                     // check stock
                     $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $data['brand_id']])->get()->count();
@@ -1924,7 +2014,7 @@ class Api extends Controller
                         $stock = new Stock(array(
                             'company_id' => $request->company_id,
                             //'branch_id' => $request->branch_id,
-                            'category_id' => $request->category_id,
+                            'category_id' => $brandSize[0]['category_id'],
                             'brand_id' => $data['brand_id'],
                             'qty' => $MlSize,
                             'cost_price' => $request->mrp,
@@ -2031,7 +2121,41 @@ class Api extends Controller
             $data['category_id'] = $brandSize[0]['category_id'];
             $purchaseId = $p_Id[$key];
             if ($purchaseId > 0) {
-                Purchase::where(['id' => $purchaseId])->update($data);
+                $update_purchase = Purchase::where(['id' => $purchaseId])->update($data);
+
+                if($update_purchase){
+                    // update in daily opening closing log table
+                    $rowData = DB::table('daily_opening_closing_log')->where('company_id',$request->company_id)->where('transaction_type', 'credit')->where('transaction_category','purchase')->where('transaction_category_table_id', $purchaseId)->orderBy('id', 'desc')->first();
+
+                    if(!empty($rowData)){
+                        // debit this stock qty from table
+
+                        $oldLogData = [];
+                        $oldLogData['company_id'] = $rowData->company_id;
+                        $oldLogData['brand_id'] = $rowData->brand_id;
+                        $oldLogData['transaction_type'] = 'debit';
+                        $oldLogData['transaction_category'] = 'purchase';
+                        $oldLogData['transaction_category_table_id'] = $purchaseId;
+                        $oldLogData['updated_transaction_category_table_id'] = $rowData->id;
+                        $oldLogData['qty'] = $rowData->qty;
+                        $oldLogData['log_date'] = $rowData->log_date;
+
+                        $insertOldLog = DB::table('daily_opening_closing_log')->insert($oldLogData);
+
+                        // new log entry
+                        $newLogData = [];
+                        $newLogData['company_id'] = $request->company_id;
+                        $newLogData['brand_id'] = $item;
+                        $newLogData['transaction_type'] = 'credit';
+                        $newLogData['transaction_category'] = 'purchase';
+                        $newLogData['transaction_category_table_id'] = $purchaseId;
+                        $newLogData['qty'] = $MlSize;
+                        $newLogData['log_date'] = !empty($request->invoice_date) ? date('Y-m-d', strtotime($request->invoice_date)) : date('Y-m-d');
+
+                        $insertNewLog = DB::table('daily_opening_closing_log')->insert($newLogData);
+                    }
+                }
+
                 $stockEntry = Purchase::select('no_btl')->where(['purchase_list_id' => $request->purchase_list_id, 'brand_id' => $data['brand_id']])->get();
                 if (count($stockEntry) > 0) {
                     $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $request->brand_id])->get()->count();
@@ -2056,9 +2180,21 @@ class Api extends Controller
                     }
                 }
             } else {
-                $save = new Purchase($data);
+                $save = Purchase::create($data);
 
-                if ($save->save()) {
+                if ($save) {
+                    // new log entry
+                    $newLogData = [];
+                    $newLogData['company_id'] = $request->company_id;
+                    $newLogData['brand_id'] = $item;
+                    $newLogData['transaction_type'] = 'credit';
+                    $newLogData['transaction_category'] = 'purchase';
+                    $newLogData['transaction_category_table_id'] = $save->id;
+                    $newLogData['qty'] = $MlSize;
+                    $newLogData['log_date'] = !empty($request->invoice_date) ? date('Y-m-d', strtotime($request->invoice_date)) : date('Y-m-d');
+
+                    $insertNewLog = DB::table('daily_opening_closing_log')->insert($newLogData);
+
                     $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $data['brand_id']])->get()->count();
                     if ($count > 0)
                         Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->increment('qty', intval($MlSize));
@@ -2101,6 +2237,25 @@ class Api extends Controller
         ]);
         $stockEntry = Purchase::select('no_btl', 'qty', 'company_id', 'invoice_no', 'brand_id')->where(['id' => $request->id])->get();
         if (count($stockEntry) > 0) {
+
+            $rowData = DB::table('daily_opening_closing_log')->where('company_id',$stockEntry[0]['company_id'])->where('transaction_type', 'credit')->where('transaction_category','purchase')->where('transaction_category_table_id', $stockEntry[0]['id'])->orderBy('id', 'desc')->first();
+
+            if(!empty($rowData)){
+                // debit this stock qty from table
+
+                $deleteLogData = [];
+                $deleteLogData['company_id'] = $rowData->company_id;
+                $deleteLogData['brand_id'] = $rowData->brand_id;
+                $deleteLogData['transaction_type'] = 'debit';
+                $deleteLogData['transaction_category'] = 'purchase';
+                $deleteLogData['transaction_category_table_id'] = $stockEntry[0]['id'];
+                $deleteLogData['updated_transaction_category_table_id'] = $rowData->id;
+                $deleteLogData['qty'] = $rowData->qty;
+                $deleteLogData['log_date'] = $rowData->log_date;
+
+                $insertOldLog = DB::table('daily_opening_closing_log')->insert($deleteLogData);
+            }
+
             // check stock
             Stock::where(['company_id' => $stockEntry[0]['company_id'],  'brand_id' => $stockEntry[0]['brand_id']])->decrement('qty', $stockEntry[0]['qty']);
             $data = Purchase::where('id', $data['id'])->update(['status' => 0]);
@@ -2127,6 +2282,25 @@ class Api extends Controller
         $stockEntries = Purchase::select('no_btl', 'company_id', 'qty', 'invoice_no', 'brand_id')->where(['purchase_list_id' => $purchase_list_id->id])->get();
         if(count($stockEntries) > 0){
             foreach ($stockEntries as $key => $stockEntry) {
+
+                $rowData = DB::table('daily_opening_closing_log')->where('company_id',$stockEntry['company_id'])->where('transaction_type', 'credit')->where('transaction_category','purchase')->where('transaction_category_table_id', $stockEntry['id'])->orderBy('id', 'desc')->first();
+
+                if(!empty($rowData)){
+                    // debit this stock qty from table
+
+                    $deleteLogData = [];
+                    $deleteLogData['company_id'] = $rowData->company_id;
+                    $deleteLogData['brand_id'] = $rowData->brand_id;
+                    $deleteLogData['transaction_type'] = 'debit';
+                    $deleteLogData['transaction_category'] = 'purchase';
+                    $deleteLogData['transaction_category_table_id'] = $stockEntry['id'];
+                    $deleteLogData['updated_transaction_category_table_id'] = $rowData->id;
+                    $deleteLogData['qty'] = $rowData->qty;
+                    $deleteLogData['log_date'] = $rowData->log_date;
+
+                    $insertOldLog = DB::table('daily_opening_closing_log')->insert($deleteLogData);
+                }
+
                 Stock::where(['company_id' => $stockEntry['company_id'],  'brand_id' => $stockEntry['brand_id']])->decrement('qty', $stockEntry['qty']);
                 if (Purchase::where('purchase_list_id', $purchase_list_id->id)->update(['status' => 0])){
                     $isDelete = true;
@@ -2154,13 +2328,60 @@ class Api extends Controller
             'id' => 'required'
         ]);
         $isDelete = false;
-        $stockEntries = Sales::select('qty', 'company_id', 'brand_id')->where(['sales_main_id' => $request->id])->get();
+        $stockEntries = Sales::select('qty', 'company_id', 'brand_id','id')->where(['sales_main_id' => $request->id])->get();
         if (count($stockEntries) > 0) {
 
             foreach ($stockEntries as $key => $stockEntry) {
                 Stock::where(['company_id' => $stockEntry->company_id,  'brand_id' => $stockEntry->brand_id])->increment('qty', $stockEntry->qty);
-                if (Sales::where('sales_main_id', $request->id)->update(['status' => 0, 'is_deleted' => '1']))
+
+                if(!empty($stockEntry) && $stockEntry->liquor_or_recipe == 'recipe'){
+                    $all_ids_of_this_recipe = Sales::where('sales_main_id',$stockEntry->sales_main_id)->where('description',$stockEntry->description)->select('qty', 'company_id', 'brand_id','id')->get();
+        
+                    if(!empty($all_ids_of_this_recipe)){
+                        foreach($all_ids_of_this_recipe as $key => $val){
+        
+                            $rowData = DB::table('daily_opening_closing_log')->where('company_id',$val->company_id)->where('transaction_type', 'debit')->where('transaction_category','sale')->where('transaction_category_table_id', $val->id)->orderBy('id', 'desc')->first();
+        
+                            if(!empty($rowData)){
+                                // debit this stock qty from table
+        
+                                $deleteLogData = [];
+                                $deleteLogData['company_id'] = $rowData->company_id;
+                                $deleteLogData['brand_id'] = $rowData->brand_id;
+                                $deleteLogData['transaction_type'] = 'credit';
+                                $deleteLogData['transaction_category'] = 'sale';
+                                $deleteLogData['transaction_category_table_id'] = $val->id;
+                                $deleteLogData['updated_transaction_category_table_id'] = $rowData->id;
+                                $deleteLogData['qty'] = $rowData->qty;
+                                $deleteLogData['log_date'] = $rowData->log_date;
+        
+                                $insertOldLog = DB::table('daily_opening_closing_log')->insert($deleteLogData);
+                            }
+                        }
+                    }
+                }else{
+                    $rowData = DB::table('daily_opening_closing_log')->where('company_id',$stockEntry->company_id)->where('transaction_type', 'debit')->where('transaction_category','sale')->where('transaction_category_table_id', $stockEntry->id)->orderBy('id', 'desc')->first();
+        
+                    if(!empty($rowData)){
+                        // debit this stock qty from table
+        
+                        $deleteLogData = [];
+                        $deleteLogData['company_id'] = $rowData->company_id;
+                        $deleteLogData['brand_id'] = $rowData->brand_id;
+                        $deleteLogData['transaction_type'] = 'credit';
+                        $deleteLogData['transaction_category'] = 'sale';
+                        $deleteLogData['transaction_category_table_id'] = $stockEntry->id;
+                        $deleteLogData['updated_transaction_category_table_id'] = $rowData->id;
+                        $deleteLogData['qty'] = $rowData->qty;
+                        $deleteLogData['log_date'] = $rowData->log_date;
+        
+                        $insertOldLog = DB::table('daily_opening_closing_log')->insert($deleteLogData);
+                    }
+                }
+                
+                if (Sales::where('sales_main_id', $request->id)->update(['status' => 0, 'is_deleted' => '1'])){
                     $isDelete = true;
+                }
             }
             if(SalesMain::where('id', $data['id'])->update(['status' => '0', 'is_deleted' => '1'])){
                 $isDelete = true;
@@ -2190,6 +2411,25 @@ class Api extends Controller
 
             if(!empty($all_ids_of_this_recipe)){
                 foreach($all_ids_of_this_recipe as $key => $val){
+
+                    $rowData = DB::table('daily_opening_closing_log')->where('company_id',$val->company_id)->where('transaction_type', 'debit')->where('transaction_category','sale')->where('transaction_category_table_id', $request->id)->orderBy('id', 'desc')->first();
+
+                    if(!empty($rowData)){
+                        // debit this stock qty from table
+
+                        $deleteLogData = [];
+                        $deleteLogData['company_id'] = $rowData->company_id;
+                        $deleteLogData['brand_id'] = $rowData->brand_id;
+                        $deleteLogData['transaction_type'] = 'credit';
+                        $deleteLogData['transaction_category'] = 'sale';
+                        $deleteLogData['transaction_category_table_id'] = $val->id;
+                        $deleteLogData['updated_transaction_category_table_id'] = $rowData->id;
+                        $deleteLogData['qty'] = $rowData->qty;
+                        $deleteLogData['log_date'] = $rowData->log_date;
+
+                        $insertOldLog = DB::table('daily_opening_closing_log')->insert($deleteLogData);
+                    }
+
                     $OldMlSize = $val->qty;
                     //update stock
                     Stock::where(['company_id' => $val->company_id,  'brand_id' => $val->brand_id])->increment('qty', $OldMlSize);
@@ -2204,6 +2444,25 @@ class Api extends Controller
             }
         }else{
             $OldMlSize = $stockEntry->qty;
+
+
+            $rowData = DB::table('daily_opening_closing_log')->where('company_id',$stockEntry->company_id)->where('transaction_type', 'debit')->where('transaction_category','sale')->where('transaction_category_table_id', $request->id)->orderBy('id', 'desc')->first();
+
+            if(!empty($rowData)){
+                // debit this stock qty from table
+
+                $deleteLogData = [];
+                $deleteLogData['company_id'] = $rowData->company_id;
+                $deleteLogData['brand_id'] = $rowData->brand_id;
+                $deleteLogData['transaction_type'] = 'credit';
+                $deleteLogData['transaction_category'] = 'sale';
+                $deleteLogData['transaction_category_table_id'] = $request->id;
+                $deleteLogData['updated_transaction_category_table_id'] = $rowData->id;
+                $deleteLogData['qty'] = $rowData->qty;
+                $deleteLogData['log_date'] = $rowData->log_date;
+
+                $insertOldLog = DB::table('daily_opening_closing_log')->insert($deleteLogData);
+            }
             //update stock
             Stock::where(['company_id' => $stockEntry->company_id,  'brand_id' => $stockEntry->brand_id])->increment('qty', $OldMlSize);
             $data = Sales::where('id', $data['id'])->update(['status' => 0, 'is_deleted' => '1']);
@@ -2300,8 +2559,8 @@ class Api extends Controller
     {
         if ($request->is_sender == 1){
 
-            $sentDataFromLoggedInCompany = Transaction::select('transactions.id', 'transactions.company_id','new_company_name','company_to_id', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'brands.btl_size',  'transactions.date','transaction_type')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_id' => $request->company_id, 'transactions.transaction_type' => 'out', 'transactions.status' => '1'])->orderBy('transactions.id', 'DESC')->get();
-            $otherCompanyCreatedEntryForInMeansSentFromLoggedInCompany = Transaction::select('transactions.id', 'transactions.company_id','new_company_name','company_to_id', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'brands.btl_size',  'transactions.date','transaction_type')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_id, 'transactions.transaction_type' => 'in', 'transactions.status' => '1'])->orderBy('transactions.id', 'DESC')->get();
+            $sentDataFromLoggedInCompany = Transaction::select('transactions.id', 'transactions.company_id','new_company_name','company_to_id', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'brands.btl_size',  'transactions.date','transaction_type','transactions.remark')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_id' => $request->company_id, 'transactions.transaction_type' => 'out', 'transactions.status' => '1'])->orderBy('transactions.id', 'DESC')->get();
+            $otherCompanyCreatedEntryForInMeansSentFromLoggedInCompany = Transaction::select('transactions.id', 'transactions.company_id','new_company_name','company_to_id', 'brands.name', 'brands.id as brand_id', 'transactions.btl', 'transactions.qty', 'brands.btl_size',  'transactions.date','transaction_type','transactions.remark')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_id, 'transactions.transaction_type' => 'in', 'transactions.status' => '1'])->orderBy('transactions.id', 'DESC')->get();
             
             if(count($sentDataFromLoggedInCompany) > 0 && count($otherCompanyCreatedEntryForInMeansSentFromLoggedInCompany) > 0){
                 $data = array_merge($sentDataFromLoggedInCompany->toArray(), $otherCompanyCreatedEntryForInMeansSentFromLoggedInCompany->toArray());
@@ -2328,8 +2587,8 @@ class Api extends Controller
                 }
             }
         }else{
-            $receivedDataFromOtherCompany = Transaction::select('transactions.id', 'transactions.company_id', 'brands.name', 'companies.name as company', 'brands.id as brand_id', 'transactions.btl', 'brands.btl_size', 'transactions.qty', 'transactions.date','transaction_type', 'transactions.company_to_id', 'transactions.new_company_name')->join('companies', 'companies.id', 'transactions.company_id')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_id, 'transactions.transaction_type' => 'out', 'transactions.status' => '1'])->orderBy('transactions.id', 'DESC')->get();
-            $loggedInCompanyCreatedEntryForInMeansReceivedFromOtherCompany = Transaction::select('transactions.id', 'brands.name', 'companies.name as company', 'brands.id as brand_id', 'transactions.btl', 'brands.btl_size', 'transactions.qty', 'transactions.date','transaction_type', 'transactions.company_to_id', 'transactions.new_company_name', 'transactions.company_id')->join('companies', 'companies.id', 'transactions.company_id')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_id' => $request->company_id, 'transactions.transaction_type' => 'in', 'transactions.status' => '1'])->orderBy('transactions.id', 'DESC')->get();
+            $receivedDataFromOtherCompany = Transaction::select('transactions.id', 'transactions.company_id', 'brands.name', 'companies.name as company', 'brands.id as brand_id', 'transactions.btl', 'brands.btl_size', 'transactions.qty', 'transactions.date','transaction_type', 'transactions.company_to_id', 'transactions.new_company_name','transactions.remark')->join('companies', 'companies.id', 'transactions.company_id')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_to_id' => $request->company_id, 'transactions.transaction_type' => 'out', 'transactions.status' => '1'])->orderBy('transactions.id', 'DESC')->get();
+            $loggedInCompanyCreatedEntryForInMeansReceivedFromOtherCompany = Transaction::select('transactions.id', 'brands.name', 'companies.name as company', 'brands.id as brand_id', 'transactions.btl', 'brands.btl_size', 'transactions.qty', 'transactions.date','transaction_type', 'transactions.company_to_id', 'transactions.new_company_name', 'transactions.company_id','transactions.remark')->join('companies', 'companies.id', 'transactions.company_id')->join('brands', 'brands.id', '=', 'transactions.brand_id')->where(['transactions.company_id' => $request->company_id, 'transactions.transaction_type' => 'in', 'transactions.status' => '1'])->orderBy('transactions.id', 'DESC')->get();
         
             if(count($receivedDataFromOtherCompany) > 0 && count($loggedInCompanyCreatedEntryForInMeansReceivedFromOtherCompany) > 0){
                 $data = array_merge($receivedDataFromOtherCompany->toArray(), $loggedInCompanyCreatedEntryForInMeansReceivedFromOtherCompany->toArray());
@@ -2471,6 +2730,37 @@ class Api extends Controller
                                     if((int)$stocks[0]['qty'] + (int)$fetch['qty'] >= (int)$qty){
                                     Sales::where(['sales_main_id' => $request->main_id, 'recipe_id' => $brandData['id'],'brand_id' => $brandData['brand_id']])->update($sales_data);
 
+                                    $rowData = DB::table('daily_opening_closing_log')->where('company_id',$request->company_id)->where('transaction_type', 'debit')->where('transaction_category','sale')->where('transaction_category_table_id', $fetch->id)->orderBy('id', 'desc')->first();
+
+                                    if(!empty($rowData)){
+                                        // debit this stock qty from table
+
+                                        $oldLogData = [];
+                                        $oldLogData['company_id'] = $rowData->company_id;
+                                        $oldLogData['brand_id'] = $rowData->brand_id;
+                                        $oldLogData['transaction_type'] = 'credit';
+                                        $oldLogData['transaction_category'] = 'sale';
+                                        
+                                        $oldLogData['transaction_category_table_id'] = $fetch->id;
+                                        $oldLogData['updated_transaction_category_table_id'] = $rowData->id;
+                                        $oldLogData['qty'] = $rowData->qty;
+                                        $oldLogData['log_date'] = $rowData->log_date;
+
+                                        $insertOldLog = DB::table('daily_opening_closing_log')->insert($oldLogData);
+
+                                        // new log entry
+                                        $newLogData = [];
+                                        $newLogData['company_id'] = $request->company_id;
+                                        $newLogData['brand_id'] = $brandData['id'];
+                                        $newLogData['transaction_type'] = 'debit';
+                                        $newLogData['transaction_category'] = 'sale';
+                                        $newLogData['transaction_category_table_id'] = $fetch->id;
+                                        $newLogData['qty'] = $qty;
+                                        $newLogData['log_date'] = !empty($request->invoice_date) ? date('Y-m-d', strtotime($request->invoice_date)) : date('Y-m-d');
+
+                                        $insertNewLog = DB::table('daily_opening_closing_log')->insert($newLogData);
+                                    }
+
                                     Stock::where(['company_id' => $fetch['company_id'], 'brand_id' => $fetch['brand_id']])->increment('qty', (int)$fetch['qty']);
                                     Stock::where(['company_id' => $fetch['company_id'], 'brand_id' => $fetch['brand_id']])->decrement('qty', $qty);
                                     $saved = true;
@@ -2483,6 +2773,20 @@ class Api extends Controller
                                     $sales_data['sales_main_id'] = $request->main_id;
                                     $sales_data['company_id'] = $request->company_id;
                                     $Sales = new Sales($sales_data);
+
+                                    if($Sales){
+                                        // new log entry
+                                        $newLogData = [];
+                                        $newLogData['company_id'] = $request->company_id;
+                                        $newLogData['brand_id'] = $brandData['id'];
+                                        $newLogData['transaction_type'] = 'debit';
+                                        $newLogData['transaction_category'] = 'sale';
+                                        $newLogData['transaction_category_table_id'] = $Sales->id;
+                                        $newLogData['qty'] = $qty;
+                                        $newLogData['log_date'] = !empty($request->invoice_date) ? date('Y-m-d', strtotime($request->invoice_date)) : date('Y-m-d');
+
+                                        $insertNewLog = DB::table('daily_opening_closing_log')->insert($newLogData);
+                                    }
                                     if($stocks[0]['qty'] >= $qty){
                                         if ($Sales->save()) {
                                             $counter++;
@@ -2538,8 +2842,21 @@ class Api extends Controller
                                     $sales_data['created_by'] = $request->user()->id;
                                     $sales_data['sale_date'] = date('Y-m-d', strtotime($request->invoice_date));
     
-                                    $Sales = new Sales($sales_data);
-                                    if ($Sales->save()) {
+                                    $Sales = Sales::create($sales_data);
+                                    if ($Sales) {
+
+                                        // new log entry
+                                        $newLogData = [];
+                                        $newLogData['company_id'] = $request->company_id;
+                                        $newLogData['brand_id'] = $brandData['id'];
+                                        $newLogData['transaction_type'] = 'debit';
+                                        $newLogData['transaction_category'] = 'sale';
+                                        $newLogData['transaction_category_table_id'] = $Sales->id;
+                                        $newLogData['qty'] = $qty;
+                                        $newLogData['log_date'] = !empty($request->invoice_date) ? date('Y-m-d', strtotime($request->invoice_date)) : date('Y-m-d');
+
+                                        $insertNewLog = DB::table('daily_opening_closing_log')->insert($newLogData);
+
                                         $counter++;
                                         $saved = true;
                                         Stock::where(['company_id' => $data['company_id'], 'brand_id' => $brandData['brand_id']])->decrement('qty', $data['qty']);
@@ -2583,6 +2900,37 @@ class Api extends Controller
                         $fetch = Sales::where('id', $p_Id[$key])->first();
 
                         Sales::where('id', $p_Id[$key])->update($sales_data);
+
+                        $rowData = DB::table('daily_opening_closing_log')->where('company_id',$request->company_id)->where('transaction_type', 'debit')->where('transaction_category','sale')->where('transaction_category_table_id', $p_Id[$key])->orderBy('id', 'desc')->first();
+
+                        if(!empty($rowData)){
+                            // debit this stock qty from table
+
+                            $oldLogData = [];
+                            $oldLogData['company_id'] = $rowData->company_id;
+                            $oldLogData['brand_id'] = $rowData->brand_id;
+                            $oldLogData['transaction_type'] = 'credit';
+                            $oldLogData['transaction_category'] = 'sale';
+                            $oldLogData['transaction_category_table_id'] = $fetch->id;
+                            $oldLogData['updated_transaction_category_table_id'] = $rowData->id;
+                            $oldLogData['qty'] = $rowData->qty;
+                            $oldLogData['log_date'] = $rowData->log_date;
+
+                            $insertOldLog = DB::table('daily_opening_closing_log')->insert($oldLogData);
+
+                            // new log entry
+                            $newLogData = [];
+                            $newLogData['company_id'] = $request->company_id;
+                            $newLogData['brand_id'] = $brand;
+                            $newLogData['transaction_type'] = 'debit';
+                            $newLogData['transaction_category'] = 'sale';
+                            $newLogData['transaction_category_table_id'] = $fetch->id;
+                            $newLogData['qty'] = $qty;
+                            $newLogData['log_date'] = !empty($request->invoice_date) ? date('Y-m-d', strtotime($request->invoice_date)) : date('Y-m-d');
+
+                            $insertNewLog = DB::table('daily_opening_closing_log')->insert($newLogData);
+                        }
+
                         Stock::where(['company_id' => $fetch['company_id'], 'brand_id' => $fetch['brand_id']])->increment('qty', $fetch['qty']);
                         Stock::where(['company_id' => $fetch['company_id'], 'brand_id' => $fetch['brand_id']])->decrement('qty', $qty);                        
                         $saved = true;
@@ -2610,8 +2958,21 @@ class Api extends Controller
                             $sales_data['no_peg'] = $no_peg[$key];
                             $sales_data['created_by'] = $request->user()->id;
                             $sales_data['sale_date'] = date('Y-m-d', strtotime($request->invoice_date));
-                            $Sales = new Sales($sales_data);
-                            if ($Sales->save()) {
+                            $Sales = Sales::create($sales_data);
+                            if ($Sales) {
+
+                                // new log entry
+                                $newLogData = [];
+                                $newLogData['company_id'] = $request->company_id;
+                                $newLogData['brand_id'] = $brand;
+                                $newLogData['transaction_type'] = 'debit';
+                                $newLogData['transaction_category'] = 'sale';
+                                $newLogData['transaction_category_table_id'] = $Sales->id;
+                                $newLogData['qty'] = $MlSize;
+                                $newLogData['log_date'] = !empty($request->invoice_date) ? date('Y-m-d', strtotime($request->invoice_date)) : date('Y-m-d');
+
+                                $insertNewLog = DB::table('daily_opening_closing_log')->insert($newLogData);
+
                                 //update stocks
                                 Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->decrement('qty', $MlSize);
                                 // logs
@@ -2670,7 +3031,7 @@ class Api extends Controller
             // 'branch_id' => 'required',
         ]);
 
-        $datas = Recipe::select('recipe_code','category_id','serving_size', 'name')->where(['company_id' => $input['company_id'], 'status' => 1])->get();
+        $datas = Recipe::select('recipe_code','category_id','serving_size', 'name')->where(['company_id' => $input['company_id'], 'status' => 1, 'is_cocktail' => 1 ])->where('brand_id', '=', '0')->get();
         $res = [];
         $checker = [];
         $i = 0;
@@ -3232,7 +3593,7 @@ class Api extends Controller
             $sales_main_data['invoice_no'] = 1;
         }
 
-        $sales_main_data['invoice_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
+        $sales_main_data['invoice_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
         $sales_main_data['company_id'] = $data['company_id'];
         $sales_main_data['created_by'] = $request->user()->id;
         $SalesMain = SalesMain::create($sales_main_data);
@@ -3259,7 +3620,7 @@ class Api extends Controller
                     $brand_id = $brand['brand_id'];
                     $data['category_id'] = $brand['category_id'];
                     $data['brand_id'] = $brand['brand_id'];
-                    $data['sale_date'] = date('Y-m-d', strtotime($dataAr['date']));
+                    $data['sale_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
                     $peg_size = Brand::select('peg_size', 'btl_size')->where(['id' => $brand_id])->get();
                     $stock = Stock::select('id', 'qty', 'btl_selling_price', 'peg_selling_price')->where(['company_id' => $data['company_id'], 'brand_id' => $brand_id])->first();
                     
@@ -3285,9 +3646,20 @@ class Api extends Controller
                                 $data['liquor_or_recipe'] = 'recipe';
                                 $data['recipe_id'] = $brand->recipe_id;
                                 $data['description'] = $brand->recipe_code . ' recipe sale';
-                                $Sales = new Sales($data);
+                                $Sales = Sales::create($data);
+
+                                $logData = [];
+                                $logData['company_id'] = $request->company_id;
+                                $logData['brand_id'] = (int)$brand['brand_id'];
+                                $logData['transaction_type'] = 'debit';
+                                $logData['transaction_category'] = 'sale';
+                                $logData['transaction_category_table_id'] = $Sales->id;
+                                $logData['qty'] = $MlSize;
+                                $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+
+                                $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
         
-                                if ($Sales->save()) {
+                                if (!empty($Sales)) {
                                     $success = true;
                                     if ($dataAr['nc'] > 0) {
                                         $data['sales_main_id'] = $SalesMain->id;
@@ -3303,8 +3675,18 @@ class Api extends Controller
                                         $data['liquor_or_recipe'] = 'recipe';
                                         $data['recipe_id'] = $brand->recipe_id;
                                         $data['description'] = $brand->recipe_code . ' recipe sale';
-                                        $Sales = new Sales($data);
-                                        $Sales->save();
+                                        $Sales = Sales::create($data);
+
+                                        $logData = [];
+                                        $logData['company_id'] = $request->company_id;
+                                        $logData['brand_id'] = (int)$brand['brand_id'];
+                                        $logData['transaction_type'] = 'debit';
+                                        $logData['transaction_category'] = 'sale';
+                                        $logData['transaction_category_table_id'] = $Sales->id;
+                                        $logData['qty'] = $MlSize1;
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+        
+                                        $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
                                     }
                                     if ($dataAr['banquet'] > 0) {
                                         $data['sales_main_id'] = $SalesMain->id;
@@ -3320,8 +3702,18 @@ class Api extends Controller
                                         $data['liquor_or_recipe'] = 'recipe';
                                         $data['recipe_id'] = $brand->recipe_id;
                                         $data['description'] = $brand->recipe_code . ' recipe sale';
-                                        $Sales = new Sales($data);
-                                        $Sales->save();
+                                        $Sales = Sales::create($data);
+
+                                        $logData = [];
+                                        $logData['company_id'] = $request->company_id;
+                                        $logData['brand_id'] = (int)$brand['brand_id'];
+                                        $logData['transaction_type'] = 'debit';
+                                        $logData['transaction_category'] = 'sale';
+                                        $logData['transaction_category_table_id'] = $Sales->id;
+                                        $logData['qty'] = $MlSize2;
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+        
+                                        $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
                                     }
                                     if ($dataAr['cocktail'] > 0) {
                                         $data['sales_main_id'] = $SalesMain->id;
@@ -3337,8 +3729,18 @@ class Api extends Controller
                                         $data['liquor_or_recipe'] = 'recipe';
                                         $data['recipe_id'] = $brand->recipe_id;
                                         $data['description'] = $brand->recipe_code . ' recipe sale';
-                                        $Sales = new Sales($data);
-                                        $Sales->save();
+                                        $Sales = Sales::create($data);
+
+                                        $logData = [];
+                                        $logData['company_id'] = $request->company_id;
+                                        $logData['brand_id'] = (int)$brand['brand_id'];
+                                        $logData['transaction_type'] = 'debit';
+                                        $logData['transaction_category'] = 'sale';
+                                        $logData['transaction_category_table_id'] = $Sales->id;
+                                        $logData['qty'] = $MlSize2;
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+        
+                                        $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
                                     }
                                 }
                             } else {
@@ -3369,9 +3771,20 @@ class Api extends Controller
                                 $data['no_peg'] = $saleAr2;
                                 $data['liquor_or_recipe'] = 'liquor';
                                 $data['description'] = 'liquor sale';
-                                $Sales = new Sales($data);
+                                $Sales = Sales::create($data);
         
-                                if ($Sales->save()) {
+
+                                $logData = [];
+                                $logData['company_id'] = $request->company_id;
+                                $logData['brand_id'] = (int)$brand['brand_id'];
+                                $logData['transaction_type'] = 'debit';
+                                $logData['transaction_category'] = 'sale';
+                                $logData['transaction_category_table_id'] = $Sales->id;
+                                $logData['qty'] = $MlSize;
+                                $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+
+                                $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+                                if (!empty($Sales)) {
                                     if ($dataAr['nc'] > 0) {
                                         $data['sale_price'] = ($nc1 * $stock->btl_selling_price) + ($nc2 * $stock->peg_selling_price);
                                         $MlSize1 = ($peg_size[0]['btl_size'] * $nc1) + ($peg_size[0]['peg_size'] * $nc2);
@@ -3382,8 +3795,18 @@ class Api extends Controller
                                         $data['sales_main_id'] = $SalesMain->id;
                                         $data['liquor_or_recipe'] = 'liquor';
                                         $data['description'] = 'liquor sale';
-                                        $Sales = new Sales($data);
-                                        $Sales->save();
+                                        $Sales = Sales::create($data);
+
+                                        $logData = [];
+                                        $logData['company_id'] = $request->company_id;
+                                        $logData['brand_id'] = (int)$brand['brand_id'];
+                                        $logData['transaction_type'] = 'debit';
+                                        $logData['transaction_category'] = 'sale';
+                                        $logData['transaction_category_table_id'] = $Sales->id;
+                                        $logData['qty'] = $MlSize1;
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+
+                                        $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
                                     }
                                     if ($dataAr['banquet'] > 0) {
                                         $data['sale_price'] = ($banAr1 * $stock->btl_selling_price) + ($banAr2 * $stock->peg_selling_price);
@@ -3395,8 +3818,19 @@ class Api extends Controller
                                         $data['sales_main_id'] = $SalesMain->id;
                                         $data['liquor_or_recipe'] = 'liquor';
                                         $data['description'] = 'liquor sale';
-                                        $Sales = new Sales($data);
-                                        $Sales->save();
+                                        $Sales = Sales::create($data);
+
+                                        $logData = [];
+                                        $logData['company_id'] = $request->company_id;
+                                        $logData['brand_id'] = (int)$brand['brand_id'];
+                                        $logData['transaction_type'] = 'debit';
+                                        $logData['transaction_category'] = 'sale';
+                                        $logData['transaction_category_table_id'] = $Sales->id;
+                                        $logData['qty'] = $MlSize2;
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+
+                                        $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+
                                     }
                                     if ($dataAr['cocktail'] > 0) {
                                         $data['sale_price'] = ($spoAr1 * $stock->btl_selling_price) + ($spoAr2 * $stock->peg_selling_price);
@@ -3408,8 +3842,18 @@ class Api extends Controller
                                         $data['sales_main_id'] = $SalesMain->id;
                                         $data['liquor_or_recipe'] = 'liquor';
                                         $data['description'] = 'liquor sale';
-                                        $Sales = new Sales($data);
-                                        $Sales->save();
+                                        $Sales = Sales::create($data);
+
+                                        $logData = [];
+                                        $logData['company_id'] = $request->company_id;
+                                        $logData['brand_id'] = (int)$brand['brand_id'];
+                                        $logData['transaction_type'] = 'debit';
+                                        $logData['transaction_category'] = 'sale';
+                                        $logData['transaction_category_table_id'] = $Sales->id;
+                                        $logData['qty'] = $MlSize3;
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+
+                                        $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
                                     }
                                 }
                             }
@@ -3418,6 +3862,7 @@ class Api extends Controller
                             if ($success) {
                                 Stock::where(['company_id' => $data['company_id'], 'brand_id' => $brand_id])->decrement('qty', $total_qty_sold);
                                 unset($MlSize, $MlSize1, $MlSize2, $total_qty_sold);
+
                                 $data_log = [
                                     'user_type' => $request->user()->type,
                                     'user_id' => $request->user()->id,
@@ -3633,6 +4078,7 @@ class Api extends Controller
                             ->where('recipes.status', 1)
                             ->where('brands.status', 1)
                             ->where('sales.status', 1)
+                            ->groupBy('recipes.id')
                             ->where('sales.sales_main_id',$request->id)
                             ->get();
 
@@ -3879,7 +4325,8 @@ class Api extends Controller
         //echo "<pre>";print_r($request);
         $data = $request->validate([
             'company_id' => 'required',
-            'company_to_id' => 'required'
+            'company_to_id' => 'required',
+            // 'remark' => 'required'
         ]);
         $data['created_by'] = $request->user()->id;
         $brand = explode(',', $request->brand_id);
@@ -3903,8 +4350,8 @@ class Api extends Controller
                     $data['new_company_name'] = $request->company_to_id;
                 }
                 $data['company_id'] = $request->company_id;
-                $Transaction = new Transaction($data);
-                if ($Transaction->save()) {
+                $Transaction = Transaction::create($data);
+                if ($Transaction) {
                     // if (Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize)) {
                     //     // add item in stocks of receiver company
                     //     $stockNum = Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->get()->count();
@@ -3928,11 +4375,38 @@ class Api extends Controller
 
                         if($request->new_company_or_existing === 'existing'){
                             if($transactionType === 'in'){
+
+                                
                                 $stockNum = Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->get()->count();
                                 $stockqty = Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->select('qty')->orderBy('id', 'desc')->first();
-        
+                                
                                 if($stockqty->qty > $MlSize){
                                     Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize);
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $request->company_id;
+                                    $logData['brand_id'] = (int)$data['brand_id'];
+                                    $logData['transaction_type'] = 'credit';
+                                    $logData['transaction_category'] = 'transfer';
+                                    $logData['transaction_category_table_id'] = $Transaction->id;
+                                    $logData['qty'] = $MlSize;
+    
+                                    $logData['log_date'] = !empty($request->date) ? date('Y-m-d', strtotime($request->date)) : date('Y-m-d');
+    
+                                    $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+    
+                                    $log2Data = [];
+                                    $log2Data['company_id'] = $request->company_to_id;
+                                    $log2Data['brand_id'] = (int)$data['brand_id'];
+                                    $log2Data['transaction_type'] = 'debit';
+                                    $log2Data['transaction_category'] = 'transfer';
+                                    $log2Data['transaction_category_table_id'] = $Transaction->id;
+                                    $log2Data['qty'] = $MlSize;
+    
+                                    $log2Data['log_date'] = !empty($request->date) ? date('Y-m-d', strtotime($request->date)) : date('Y-m-d');
+    
+                                    $insertLog2 = DB::table('daily_opening_closing_log')->insert($log2Data);
+
                                     if ($stockNum > 0){
                                         Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize); // if item already exist in store
                                     }else {
@@ -3953,6 +4427,31 @@ class Api extends Controller
         
                                 if($stockqty->qty > $MlSize){
                                     Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize);
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $request->company_to_id;
+                                    $logData['brand_id'] = (int)$data['brand_id'];
+                                    $logData['transaction_type'] = 'credit';
+                                    $logData['transaction_category'] = 'transfer';
+                                    $logData['transaction_category_table_id'] = $Transaction->id;
+                                    $logData['qty'] = $MlSize;
+    
+                                    $logData['log_date'] = !empty($request->date) ? date('Y-m-d', strtotime($request->date)) : date('Y-m-d');
+    
+                                    $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+    
+                                    $log2Data = [];
+                                    $log2Data['company_id'] = $request->company_id;
+                                    $log2Data['brand_id'] = (int)$data['brand_id'];
+                                    $log2Data['transaction_type'] = 'debit';
+                                    $log2Data['transaction_category'] = 'transfer';
+                                    $log2Data['transaction_category_table_id'] = $Transaction->id;
+                                    $log2Data['qty'] = $MlSize;
+    
+                                    $log2Data['log_date'] = !empty($request->date) ? date('Y-m-d', strtotime($request->date)) : date('Y-m-d');
+    
+                                    $insertLog2 = DB::table('daily_opening_closing_log')->insert($log2Data);
+                                    
                                     if ($stockNum > 0){
                                         Stock::where(['company_id' => $request->company_to_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize); // if item already exist in store
                                     }else {
@@ -3972,10 +4471,23 @@ class Api extends Controller
                         }else{
 
                             if($transactionType === 'in'){
+                                
                                 $stockqty = Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->select('qty')->orderBy('id', 'desc')->first();
     
                                 Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->increment('qty', $MlSize);
 
+                                $logData = [];
+                                $logData['company_id'] = $request->company_id;
+                                $logData['brand_id'] = (int)$data['brand_id'];
+                                $logData['transaction_type'] = 'credit';
+                                $logData['transaction_category'] = 'transfer';
+                                $logData['transaction_category_table_id'] = $Transaction->id;
+                                $logData['qty'] = $MlSize;
+
+                                $logData['log_date'] = !empty($request->date) ? date('Y-m-d', strtotime($request->date)) : date('Y-m-d');
+
+                                $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+                                
                                 // $data['company_id'] = 0;
                                 // $data['company_name_for_transfer'] = $request->company_to_id;
                                 // $data['category_id'] = $brandSize['category_id'];
@@ -3990,6 +4502,19 @@ class Api extends Controller
     
                                     Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize);
     
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $request->company_id;
+                                    $logData['brand_id'] = (int)$data['brand_id'];
+                                    $logData['transaction_type'] = 'debit';
+                                    $logData['transaction_category'] = 'transfer';
+                                    $logData['transaction_category_table_id'] = $Transaction->id;
+                                    $logData['qty'] = $MlSize;
+
+                                    $logData['log_date'] = !empty($request->date) ? date('Y-m-d', strtotime($request->date)) : date('Y-m-d');
+
+                                    $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+
                                     $data['company_id'] = 0;
                                     $data['company_name_for_transfer'] = $request->company_to_id;
                                     $data['category_id'] = $brandSize['category_id'];
@@ -5161,7 +5686,7 @@ class Api extends Controller
         $transactionData = Transaction::where('id', $request->id)->first();
 
         if(!empty($transactionData)){
-            $transactionDelete = Transaction::where('id', $request->id)->update(['status' => 0]);
+            $transactionDelete = Transaction::where('id', $request->id)->update(['status' => '0']);
             
             if($transactionDelete){
             
@@ -5179,6 +5704,42 @@ class Api extends Controller
                         Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                     }else{
                         Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
+                    }
+                }
+
+                // log entry manage
+
+                $logData = DB::table('daily_opening_closing_log')->where('transaction_category', 'transfer')->where('transaction_category_table_id', $request->id)->get();
+
+                if(!empty($logData)){
+                    foreach($logData as $key => $value){
+                        if($value->transaction_type == 'credit'){
+                            $logData = [];
+                            $logData['company_id'] = $value->company_id;
+                            $logData['brand_id'] = $value->brand_id;
+                            $logData['transaction_type'] = 'debit';
+                            $logData['transaction_category'] = 'transfer';
+                            $logData['transaction_category_table_id'] = $request->id;
+                            $logData['updated_transaction_category_table_id'] = $value->id;
+                            $logData['qty'] = $value->qty;
+
+                            $logData['log_date'] = date('Y-m-d', strtotime($value->log_date));
+
+                            $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+                        }else{
+                            $logData = [];
+                            $logData['company_id'] = $value->company_id;
+                            $logData['brand_id'] = $value->brand_id;
+                            $logData['transaction_type'] = 'credit';
+                            $logData['transaction_category'] = 'transfer';
+                            $logData['transaction_category_table_id'] = $request->id;
+                            $logData['updated_transaction_category_table_id'] = $value->id;
+                            $logData['qty'] = $value->qty;
+
+                            $logData['log_date'] = date('Y-m-d', strtotime($value->log_date));
+
+                            $insertLog = DB::table('daily_opening_closing_log')->insert($logData);
+                        }
                     }
                 }
 
@@ -5281,7 +5842,40 @@ class Api extends Controller
                 Stock::where(['company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $stkQty]);
                 // update daily opening
 
-                DailyOpening::where(['id' => $opening_id,'company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize, 'store_btl' => $qtyStoreBtl, 'store_peg' => $qtyStorePeg, 'bar1_btl' => $qtyBar1Btl, 'bar1_peg' => $qtyBar1Peg, 'bar2_btl' => $qtyBar2Btl, 'bar2_peg' => $qtyBar2Peg, 'date' => $date]);
+                $update_opening = DailyOpening::where(['id' => $opening_id,'company_id' => $request->company_id,  'brand_id' => $brand])->update(['qty' => $MlSize, 'store_btl' => $qtyStoreBtl, 'store_peg' => $qtyStorePeg, 'bar1_btl' => $qtyBar1Btl, 'bar1_peg' => $qtyBar1Peg, 'bar2_btl' => $qtyBar2Btl, 'bar2_peg' => $qtyBar2Peg, 'date' => $date]);
+                
+                if($update_opening){
+                    // update in daily opening closing log table
+                    $rowData = DB::table('daily_opening_closing_log')->where('company_id',$request->company_id)->where('transaction_type', 'credit')->where('transaction_category','opening')->where('transaction_category_table_id', $opening_id)->orderBy('id', 'desc')->first();
+
+                    if(!empty($rowData)){
+                        // debit this stock qty from table
+
+                        $oldLogData = [];
+                        $oldLogData['company_id'] = $rowData->company_id;
+                        $oldLogData['brand_id'] = $rowData->brand_id;
+                        $oldLogData['transaction_type'] = 'debit';
+                        $oldLogData['transaction_category'] = 'opening';
+                        $oldLogData['transaction_category_table_id'] = $opening_id;
+                        $oldLogData['updated_transaction_category_table_id'] = $rowData->id;
+                        $oldLogData['qty'] = $rowData->qty;
+                        $oldLogData['log_date'] = $rowData->log_date;
+
+                        $insertOldLog = DB::table('daily_opening_closing_log')->insert($oldLogData);
+
+                        // new log entry
+                        $newLogData = [];
+                        $newLogData['company_id'] = $request->company_id;
+                        $newLogData['brand_id'] = $brand;
+                        $newLogData['transaction_type'] = 'credit';
+                        $newLogData['transaction_category'] = 'opening';
+                        $newLogData['transaction_category_table_id'] = $opening_id;
+                        $newLogData['qty'] = $MlSize;
+                        $newLogData['log_date'] = !empty($request->date) ? date('Y-m-d', strtotime($request->date)) : date('Y-m-d');
+
+                        $insertNewLog = DB::table('daily_opening_closing_log')->insert($newLogData);
+                    }
+                }
                 $isSaved = true;
                 return response()->json([
                     'message' => 'Item opening updated',

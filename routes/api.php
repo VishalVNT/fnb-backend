@@ -182,4 +182,5 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
 	
 	// permission
     Route::get('/getPermission', [Api::class, 'getPermission']);
+    Route::post('/createDailyOpeningClosingLog', [Api::class, 'createDailyOpeningClosingLog']);
 });

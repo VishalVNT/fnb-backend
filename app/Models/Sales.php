@@ -25,6 +25,7 @@ class Sales extends Model
 		'sale_date',
 		'no_btl',
 		'no_peg',
-		'liquor_or_recipe'
+		'liquor_or_recipe',
+		'log_created_or_not',
     ];
 }

@@ -20,5 +20,6 @@ class DailyOpening extends Model
         'bar2_btl',
         'bar2_peg',
         'status',
+		'log_created_or_not',
     ];
 }

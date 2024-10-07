@@ -85,7 +85,10 @@ function convertBtlPeg($qty, $brandSize, $peg_size)
 			$total_q = $total_q - $peg_size;
 			$peg++;
 		}
-		return array('btl' => $btl, 'peg' => $peg, 'btl_size' => $brandSize, 'peg_size' => $peg_size);
+
+        $formattedPeg = str_pad($peg, 2, '0', STR_PAD_LEFT);
+
+		return array('btl' => $btl, 'peg' => $formattedPeg, 'btl_size' => $brandSize, 'peg_size' => $peg_size);
 	}
 	return array('btl' => 0, 'peg' => 0, 'btl_size' => 0, 'peg_size' => 0);
 }

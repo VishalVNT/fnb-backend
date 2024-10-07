@@ -23,5 +23,6 @@ class purchase extends Model
 		'no_btl',
 		'batch_no',
 		'vendor_id',
+		'log_created_or_not',
     ];
 }

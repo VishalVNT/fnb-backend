@@ -18,6 +18,7 @@ class Transaction extends Model
         'btl',
         'log',
         'date',
+        'remark',
         'status',
         'created_by'
     ];
