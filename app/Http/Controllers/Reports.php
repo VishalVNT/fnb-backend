@@ -4,7 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Brand;
 use App\Models\Category;
-use App\Models\DailyOpening;
+use App\Models\Da0.3
+ilyOpening;
 use App\Models\LinkCompany;
 use App\Models\physical_history;
 use App\Models\purchase;
@@ -1420,6 +1421,25 @@ class Reports extends Controller
             ->get()
             ->keyBy('brand_id');
 
+        $transferIn = DB::table('daily_opening_closing_log')
+                        ->where('company_id', $company_id)
+                        ->whereBetween('log_date', [$fromDate, $toDate])
+                        ->where('transaction_type','credit')
+                        ->where('transaction_category','transfer')
+                        ->select('brand_id', 'transaction_type', DB::raw('SUM(qty) as qty'),'log_date')
+                        ->get()
+                        ->keyBy('brand_id');
+
+
+        $transferOut = DB::table('daily_opening_closing_log')
+                        ->where('company_id', $company_id)
+                        ->whereBetween('log_date', [$fromDate, $toDate])
+                        ->where('transaction_type','debit')
+                        ->where('transaction_category','transfer')
+                        ->select('brand_id', 'transaction_type', DB::raw('SUM(qty) as qty'),'log_date')
+                        ->get()
+                        ->keyBy('brand_id');
+
         // Fetch sales data for the date range
         $salesData = Sales::where('company_id', $company_id)
             ->whereBetween('sale_date', [$fromDate, $toDate])
@@ -1471,11 +1491,18 @@ class Reports extends Controller
                     // Get purchase data for the brand
                     $purchaseQty = isset($purchasesData[$brandId]) ? $purchasesData[$brandId]->qty : 0;
                     $purchaseSum += $purchaseQty;
+
+                    $transferInQty = isset($transferIn[$brandId]) ? $transferIn[$brandId]->qty : 0;
+                    $purchaseSum += $transferInQty;
+
                     $total = $open + $purchaseQty;
 
                     // Get sales data for the brand
                     $saleQty = isset($salesData[$brandId]) ? $salesData[$brandId]->qty : 0;
                     $saleSum += $saleQty;
+
+                    $transferOutQty = isset($transferOut[$brandId]) ? $transferOut[$brandId]->qty : 0;
+                    $saleSum += $transferOutQty;
 
                     // Calculate closing stock
                     $closing = $total - $saleQty;
@@ -1514,7 +1541,6 @@ class Reports extends Controller
 
         return response()->json($json);
     }
-
 
     public function DailyReport(Request $request)
     {
@@ -1561,6 +1587,24 @@ class Reports extends Controller
             ->groupBy('invoice_date', 'brand_id')
             ->get()
             ->groupBy('invoice_date');
+
+        $transferIn = DB::table('daily_opening_closing_log')
+                        ->where('company_id', $company_id)
+                        ->whereBetween('log_date', [$fromDate, $toDate])
+                        ->where('transaction_type','credit')
+                        ->where('transaction_category','transfer')
+                        ->select('brand_id', 'transaction_type', DB::raw('SUM(qty) as qty'),'log_date')
+                        ->get()
+                        ->groupBy('log_date');
+
+        $transferOut = DB::table('daily_opening_closing_log')
+                        ->where('company_id', $company_id)
+                        ->whereBetween('log_date', [$fromDate, $toDate])
+                        ->where('transaction_type','debit')
+                        ->where('transaction_category','transfer')
+                        ->select('brand_id', 'transaction_type', DB::raw('SUM(qty) as qty'),'log_date')
+                        ->get()
+                        ->groupBy('log_date');
 
         $salesData = Sales::where('company_id', $company_id)
             ->whereBetween('sale_date', [$fromDate, $toDate])
@@ -1617,11 +1661,18 @@ class Reports extends Controller
                         // Get purchase and sale data for the brand
                         $purchaseQty = isset($purchasesData[$currentDate]) ? $purchasesData[$currentDate]->where('brand_id', $brandId)->sum('qty') : 0;
                         $purchaseSum += $purchaseQty;
+
+                        $transferInQty = isset($transferIn[$currentDate]) ? $transferIn[$currentDate]->where('brand_id', $brandId)->sum('qty') : 0;
+                        $purchaseSum += $transferInQty;
                         $total = $open + $purchaseQty;
 
                         $saleQty = isset($salesData[$currentDate]) ? $salesData[$currentDate]->where('brand_id', $brandId)->sum('qty') : 0;
 
                         $saleSum += $saleQty;
+
+                        $transferOutQty = isset($transferOut[$currentDate]) ? $transferOut[$currentDate]->where('brand_id', $brandId)->sum('qty') : 0;
+
+                        $saleSum += $transferOutQty;
 
                         // Calculate closing stock
                         $closing = $total - $saleQty;
@@ -1640,7 +1691,7 @@ class Reports extends Controller
                     $totalSumFinal = ($openSum + $purchaseSum) ? convertBtlPeg($openSum + $purchaseSum, $btl_size, $peg_size->peg_size) : ['btl' => 0, 'peg' => 0];
                     $saleSumFinal = $saleSum ? convertBtlPeg($saleSum, $btl_size, $peg_size->peg_size) : ['btl' => 0, 'peg' => 0];
                     $closingSumFinal = $closingSum ? convertBtlPeg($closingSum, $btl_size, $peg_size->peg_size) : ['btl' => 0, 'peg' => 0];
-
+                    
                     // Add the calculated data
                     $data['opening'][$category->short_name . '-' . $btl_size] = ($openSumFinal['btl'] || $openSumFinal['peg']) ? $openSumFinal['btl'] . '.' . $openSumFinal['peg'] : '0.00';
                     $data['purchase'][$category->short_name . '-' . $btl_size] = ($purchaseSumFinal['btl'] || $purchaseSumFinal['peg']) ? $purchaseSumFinal['btl'] . '.' . $purchaseSumFinal['peg'] : '0.00';
@@ -1756,7 +1807,7 @@ class Reports extends Controller
             $newMonth = explode(' ', $month);
             $categories = Category::where('status', 1)->get();
             foreach ($categories as $category) {
-                $btls = Brand::where(['category_id' => $category->id])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))->get(); // get unique bottle size of that category
+                $btls = Brand::where(['category_id' => $category->id])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_si-okjnb ze"))->get(); // get unique bottle size of that category
                 foreach ($btls as $key2 => $btl_size) {
                     $brands = Brand::where(['category_id' => $category['id'], 'btl_size' => $btl_size['btl_size']])->get(); // get brand of that category
                     $openSum = 0;
