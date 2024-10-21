@@ -2581,9 +2581,9 @@ class Api extends Controller
                     $data_for_log_data_for_debit['transaction_table_id'] = $purchaseId;
                     $data_for_log_data_for_debit['brand_id'] = (int)$purchaseDataForLogUpdate->brand_id;
                     $data_for_log_data_for_debit['brand_name'] = $brandDetailsForDebit->name;
-                    $data_for_log_data_for_debit['category_id'] = $category_details_for_debit->id;
-                    $data_for_log_data_for_debit['category_name'] = $category_details_for_debit->name;
-                    $data_for_log_data_for_debit['category_short_name'] = $category_details_for_debit->short_name;
+                    $data_for_log_data_for_debit['category_id'] = $category_details->id;
+                    $data_for_log_data_for_debit['category_name'] = $category_details->name;
+                    $data_for_log_data_for_debit['category_short_name'] = $category_details->short_name;
                     $data_for_log_data_for_debit['btl_size'] = $brandDetailsForDebit->btl_size;
                     $data_for_log_data_for_debit['peg_size'] = $brandDetailsForDebit->peg_size;
                     $data_for_log_data_for_debit['qty'] = $purchaseDataForLogUpdate->qty;
