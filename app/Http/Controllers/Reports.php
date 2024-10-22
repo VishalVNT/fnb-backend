@@ -2529,6 +2529,44 @@ class Reports extends Controller
         return $tableNames;
     }
 
+    protected function getLastFinancialYearTables()
+    {
+        // Get the current year and month
+        $currentDate = Carbon::now();
+
+        // Determine the financial year start and end
+        $financialYearStart = $currentDate->month >= 4 ? $currentDate->year - 1 : $currentDate->year - 2;
+        $financialYearEnd = $financialYearStart + 1;
+
+        // Financial year months (April to March)
+        $months = ['04', '05', '06', '07', '08', '09', '10', '11', '12', '01', '02', '03'];
+
+        // Create patterns for the tables you want to match
+        $patterns = [];
+        foreach ($months as $month) {
+            $year = ($month >= '04') ? $financialYearStart : $financialYearEnd;
+            $patterns[] = "{$year}_{$month}_%";
+        }
+
+        // Build the SQL query
+        $query = "SHOW TABLES WHERE ";
+        $queryParts = [];
+        foreach ($patterns as $pattern) {
+            $queryParts[] = "Tables_in_" . DB::getDatabaseName() . " LIKE '" . $pattern . "'";
+        }
+        $query .= implode(" OR ", $queryParts);
+
+        // Execute the query
+        $tables = DB::select($query);
+
+        // Extract table names from the result
+        $tableNames = array_map(function($table) {
+            return array_values((array)$table)[0];
+        }, $tables);
+
+        return $tableNames;
+    }
+
     // Main yearly report generation
     public function YearlyReport(Request $request)
     {
@@ -2631,7 +2669,7 @@ class Reports extends Controller
                 $transactionType = $data['transaction_type'];
                 $transactionCategory = $data['transaction_category'];
                 $qty = $data['qty'];
-                
+
                 // Adjust quantity based on transaction_category
                 if ($transactionType === 'opening') {
                     if ($transactionCategory === 'credit') {
@@ -2830,6 +2868,7 @@ class Reports extends Controller
         }
         return response()->json($json);
     }
+    
     public function getCurrentFinancialYearMonths()
     {
         // Get the current year
@@ -2857,182 +2896,515 @@ class Reports extends Controller
 
         return $months;
     }
+
     public function BrandwiseReport(Request $request)
     {
         $json = [];
-        $data = [];
-        $subtotals = [];
-        $categories = Category::where(['status' => 1])->get();
+        $all_row_data = [];
+        $last_financial_year_all_row_data = [];
         $company_id = $request->company_id;
         $currentDate = $request->to_date;
+        $to_date_month = explode('-', $currentDate)[1];
 
-        // Retrieve all unique btl_size values from the Brand table
-        $btlSizes = Brand::distinct()->pluck('btl_size')->toArray();
+        // Initialize data arrays
+        $opening_data = [];
+        $purchase_data = [];
+        $sales_data = [];
+        $closing_data = [];
 
+        // Fetch tables
+        $tables = $this->getFinancialYearTables();
+        $last_financial_year_tables = $this->getLastFinancialYearTables();
 
-        foreach ($categories as $category) {
-            $cat_name = $category->name;
-            $btls = Brand::where(['category_id' => $category->id])->get();
-            //total
-            $subtotalOpening = 0;
-            $subtotalPurchase = 0;
-            $subtotalSales     = 0;
-            $subtotalClosing = 0;
-            $openSum = 0;
-            $open = 0;
-            $purchaseSum = 0;
-            $totalSum = 0;
-            $saleSum = 0;
-            $closingSum = 0;
-            foreach ($btls as $key2 => $brand) {
-                $brand_name = $brand['name'];
-                $btl_size = $brand['btl_size'];
+        $to_date_table = null;
 
+        // Fetch last financial year data
+        $last_financial_year_all_row_data = $this->fetchDataFromTables($last_financial_year_tables, $company_id);
 
-                // opening section
-                $opening = DailyOpening::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-                    ->whereDate('date', $currentDate)
-                    ->select(DB::raw('COALESCE(qty, 0) as qty'))
-                    ->first();
-                if ($opening)
-                    $open = $opening['qty'];
-                else
-                    $open = 0;
-                $openSum = $openSum + $open;
+        // Fetch current financial year data
+        if (!empty($tables)) {
+            // Find the table for the current month
+            $to_date_table = $this->findToDateTable($tables, $to_date_month);
 
-                // purchase section
-                $purchase = Purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-                    ->whereDate('invoice_date', $currentDate)
+            // Fetch data for all months except the current one
+            $all_row_data = $this->fetchDataFromTables($tables, $company_id);
 
-                    ->select(DB::raw('COALESCE(qty, 0) as qty'))
-                    ->first();
-                if ($purchase)
-                    $purchaseQty = $purchase['qty'];
-                else
-                    $purchaseQty = 0;
-                $purchaseSum = $purchaseSum + $purchaseQty;
+            // Fetch data for the current month up to the specified date
+            if ($to_date_table) {
+                $currentMonthData = DB::table($to_date_table)
+                    ->where('company_id', $company_id)
+                    ->whereDate('log_date', '<=', $currentDate)
+                    ->select('data')
+                    ->get()
+                    ->pluck('data')
+                    ->toArray();
 
-                $total = $purchaseQty + $open;
-                if ($total)
-                    $totalSum = $totalSum + $total;
-
-                // sales
-                $sales = Sales::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-                    ->whereDate('sale_date', $currentDate)
-
-                    ->select(DB::raw('COALESCE(qty, 0) as qty'))
-                    ->first();
-                if ($sales)
-                    $saleQty = $sales['qty'];
-                else
-                    $saleQty = 0;
-                $saleSum = $saleSum + $saleQty;
-
-                // total section
-                $closing = $total - $saleQty;
-                if ($total)
-                    $closingSum = $closingSum + $closing;
-
-
-                $open_btl = convertBtlPeg($open, $brand['btl_size'], $brand['peg_size']);
-                // total calculation
-                $purchase_btl = convertBtlPeg($purchaseQty, $brand['btl_size'], $brand['peg_size']);
-                $sale_btl = convertBtlPeg($saleQty, $brand['btl_size'], $brand['peg_size']);
-                $closing_btl = convertBtlPeg($closing, $brand['btl_size'], $brand['peg_size']);
-
-                $categoryData = [
-                    'Category' => $cat_name,
-                    'Brand Name' => $brand_name,
-                    'TPNo' => '',
-                ];
-
-                // Add btl_size data to the categoryData array
-                foreach ($btlSizes as $size) {
-                    if ($size == $btl_size) {
-                        $categoryData['opening-' . $size] = $open_btl['btl'] . '.' . $open_btl['peg'];
-                    } else {
-                        $categoryData['opening-' . $size] = '';
-                    }
-                }
-                foreach ($btlSizes as $size) {
-                    if ($size == $btl_size) {
-                        $categoryData['purchase-' . $size] = $purchase_btl['btl'] . '.' . $purchase_btl['peg'];
-                    } else {
-                        $categoryData['purchase-' . $size] = '';
-                    }
-                }
-                foreach ($btlSizes as $size) {
-                    if ($size == $btl_size) {
-                        $categoryData['sales-' . $size] = $sale_btl['btl'] . '.' . $sale_btl['peg'];
-                    } else {
-                        $categoryData['sales-' . $size] = '';
-                    }
-                }
-                foreach ($btlSizes as $size) {
-                    if ($size == $btl_size) {
-                        $categoryData['closingstock-' . $size] = $closing_btl['btl'] . '.' . $closing_btl['peg'];
-                    } else {
-                        $categoryData['closingstock-' . $size] = '';
-                    }
-                }
-
-                $data[] = $categoryData;
+                $all_row_data = array_merge($all_row_data, $currentMonthData);
             }
-
-            // Calculate subtotals for each btl_size within the category
-            $categorySubtotal = [
-                'Category' => $cat_name,
-                'Brand Name' => 'SUBTOTAL',
-                'TPNo' => '',
-            ];
-
-            // total calculation
-            $c_open = convertBtlPeg($openSum, $brand['btl_size'], $brand['peg_size']);
-            $c_purchase = convertBtlPeg($purchaseSum, $brand['btl_size'], $brand['peg_size']);
-            $c_sale = convertBtlPeg($saleSum, $brand['btl_size'], $brand['peg_size']);
-            $c_closing = convertBtlPeg($closingSum, $brand['btl_size'], $brand['peg_size']);
-
-            $categoryData = [
-                'Category' => $cat_name,
-                'Brand Name' => $brand_name,
-                'TPNo' => '',
-            ];
-
-            // Add btl_size data to the categoryData array
-            foreach ($btlSizes as $size) {
-                if ($size == $btl_size) {
-                    $categorySubtotal['opening-' . $size] = $c_open['btl'] . '.' . $c_open['peg'];
-                } else {
-                    $categorySubtotal['opening-' . $size] = '';
-                }
-            }
-            foreach ($btlSizes as $size) {
-                if ($size == $btl_size) {
-                    $categorySubtotal['purchase-' . $size] = $c_purchase['btl'] . '.' . $c_purchase['peg'];
-                } else {
-                    $categorySubtotal['purchase-' . $size] = '';
-                }
-            }
-            foreach ($btlSizes as $size) {
-                if ($size == $btl_size) {
-                    $categorySubtotal['sales-' . $size] = $c_sale['btl'] . '.' . $c_sale['peg'];
-                } else {
-                    $categorySubtotal['sales-' . $size] = '';
-                }
-            }
-            foreach ($btlSizes as $size) {
-                if ($size == $btl_size) {
-                    $categorySubtotal['closingstock-' . $size] = $c_closing['btl'] . '.' . $c_closing['peg'];
-                } else {
-                    $categorySubtotal['closingstock-' . $size] = '';
-                }
-            }
-
-            $data[] = $categorySubtotal;
         }
 
-        $json = $data;
+        // Process current and last financial year data
+        $all_category_brands = $this->processRowData($all_row_data);
+        $last_financial_year_all_category_brands = $this->processRowData($last_financial_year_all_row_data);
 
-        return response()->json($json);
+        // Calculate opening, purchase, sales, and closing data
+        $this->calculateBrandwiseData($all_category_brands, $all_row_data, $last_financial_year_all_category_brands, $last_financial_year_all_row_data, $opening_data, $purchase_data, $sales_data, $closing_data);
+
+        foreach ($opening_data as $category => $sizes) {
+            // Sort the sizes in descending order
+            krsort($sizes); // Sort by key in descending order
+            
+            $opening_data[$category] = $sizes;
+        }
+        foreach ($purchase_data as $category => $sizes) {
+            // Sort the sizes in descending order
+            krsort($sizes); // Sort by key in descending order
+            
+            $purchase_data[$category] = $sizes;
+        }
+        foreach ($sales_data as $category => $sizes) {
+            // Sort the sizes in descending order
+            krsort($sizes); // Sort by key in descending order
+            
+            $sales_data[$category] = $sizes;
+        }
+        foreach ($closing_data as $category => $sizes) {
+            // Sort the sizes in descending order
+            krsort($sizes); // Sort by key in descending order
+            
+            $closing_data[$category] = $sizes;
+        }
+
+        foreach ($opening_data as $category => $sizes) {
+            foreach($sizes as $sizesKey => $sizesVal)
+            {
+                foreach($sizesVal as $brands => $qty)
+                {
+                    $brand_details = DB::table('brands')->where('name', $brands)->select('peg_size', 'btl_size')->first();
+    
+                    $convertIntoBtlPeg = convertBtlPeg($qty, $brand_details->btl_size, $brand_details->peg_size);
+    
+                    $opening_data[$category][$sizesKey][$brands] = $convertIntoBtlPeg['btl'] . '.' . $convertIntoBtlPeg['peg'];
+                }
+            }
+        }
+        foreach ($purchase_data as $category => $sizes) {
+            foreach($sizes as $sizesKey => $sizesVal)
+            {
+                foreach($sizesVal as $brands => $qty)
+                {
+                    $brand_details = DB::table('brands')->where('name', $brands)->select('peg_size', 'btl_size')->first();
+    
+                    $convertIntoBtlPeg = convertBtlPeg($qty, $brand_details->btl_size, $brand_details->peg_size);
+    
+                    $purchase_data[$category][$sizesKey][$brands] = $convertIntoBtlPeg['btl'] . '.' . $convertIntoBtlPeg['peg'];
+                }
+            }
+        }
+        foreach ($sales_data as $category => $sizes) {
+            foreach($sizes as $sizesKey => $sizesVal)
+            {
+                foreach($sizesVal as $brands => $qty)
+                {
+                    $brand_details = DB::table('brands')->where('name', $brands)->select('peg_size', 'btl_size')->first();
+    
+                    $convertIntoBtlPeg = convertBtlPeg($qty, $brand_details->btl_size, $brand_details->peg_size);
+    
+                    $sales_data[$category][$sizesKey][$brands] = $convertIntoBtlPeg['btl'] . '.' . $convertIntoBtlPeg['peg'];
+                }
+            }
+        }
+        foreach ($closing_data as $category => $sizes) {
+            foreach($sizes as $sizesKey => $sizesVal)
+            {
+                foreach($sizesVal as $brands => $qty)
+                {
+                    $brand_details = DB::table('brands')->where('name', $brands)->select('peg_size', 'btl_size')->first();
+    
+                    $convertIntoBtlPeg = convertBtlPeg($qty, $brand_details->btl_size, $brand_details->peg_size);
+    
+                    $closing_data[$category][$sizesKey][$brands] = $convertIntoBtlPeg['btl'] . '.' . $convertIntoBtlPeg['peg'];
+                }
+            }
+        }
+        
+        $data = [];
+        $data['opening'] = $opening_data;
+        $data['purchase'] = $purchase_data;
+        $data['sales'] = $sales_data;
+        $data['closing'] = $closing_data;
+
+        $uniqueSizes = $this->getUniqueSizes($data);
+
+        $result = [];
+
+        if(!empty($data))
+        {
+            // all data
+            foreach($data as $key => $value)
+            {
+                // divide in types
+                if(!empty($value)){
+                    foreach($value as $b_key => $b_val)
+                    {
+                        // divide in bottles
+                        if(!empty($b_val))
+                        {
+                            foreach($b_val as $brand_key => $brand_val)
+                            {
+                                // divide in brands
+                                if(!empty($brand_val))
+                                {
+                                    foreach($brand_val as $final_key => $final_val)
+                                    {
+                                        // divide in qty
+                                        if(!empty($uniqueSizes)){
+                                            foreach($uniqueSizes as $uniqueKey => $uniqueValue)
+                                            {
+                                                if($uniqueValue == $brand_key)
+                                                {
+                                                    $result[$final_key][$key][$uniqueValue] = $final_val;
+                                                }else{
+                                                    $result[$final_key][$key][$uniqueValue] = '';
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+            }
+        }
+        // Return all data: opening, purchase, sales, and closing
+        return [
+            'opening' => $opening_data,
+            'purchase' => $purchase_data,
+            'sales' => $sales_data,
+            'closing' => $closing_data,
+            'quantities' => $result
+        ];
     }
+
+    private function getUniqueSizes($data)
+    {
+        $sizes = [];
+        foreach ($data as $type => $categories) {
+            foreach ($categories as $category => $sizesData) {
+                // Merge all sizes from different categories
+                $sizes = array_merge($sizes, array_keys($sizesData));
+            }
+        }
+        
+        // Remove duplicates and sort in descending order
+        $uniqueSizes = array_unique($sizes);
+        
+        // Sort the sizes numerically in descending order
+        rsort($uniqueSizes, SORT_NUMERIC);
+        
+        return $uniqueSizes;
+    }
+
+    /**
+     * Fetch data from financial year tables
+     */
+    protected function fetchDataFromTables($tables, $company_id)
+    {
+        return !empty($tables) ? collect($tables)->flatMap(function ($table_value) use ($company_id) {
+            return DB::table($table_value)
+                ->where('company_id', $company_id)
+                ->select('data')
+                ->get()
+                ->pluck('data')
+                ->toArray();
+        })->toArray() : [];
+    }
+
+    /**
+     * Find the table for the current month
+     */
+    protected function findToDateTable(&$tables, $to_date_month)
+    {
+        return array_reduce($tables, function ($carry, $table_value) use ($to_date_month, &$tables) {
+            $month_and_date = explode('_', $table_value)[1];
+            if ($month_and_date == $to_date_month) {
+                $carry = $table_value;
+                $tables = array_filter($tables, fn($value) => $value !== $table_value); // Exclude this table
+            }
+            return $carry;
+        });
+    }
+
+    /**
+     * Process row data into categories, bottle sizes, and brands
+     */
+    protected function processRowData($row_data)
+    {
+        $category_brands = [];
+
+        foreach ($row_data as $data_value) {
+            $json_data = json_decode($data_value);
+            if (!empty($json_data)) {
+                foreach ($json_data as $json_value) {
+                    // Collect brand names and bottle sizes under categories
+                    $category_brands[$json_value->category_name][$json_value->btl_size][$json_value->brand_name] = 0.00; // Initialize quantity
+                }
+            }
+        }
+
+        return $category_brands;
+    }
+
+    /**
+     * Calculate brandwise opening, purchase, sales, and closing data
+     */
+    protected function calculateBrandwiseData($all_category_brands, $all_row_data, $last_financial_year_category_brands, $last_financial_year_data, &$opening_data, &$purchase_data, &$sales_data, &$closing_data)
+    {
+        foreach ($all_category_brands as $category => $btl_sizes) {
+            foreach ($btl_sizes as $btl_size => $brands) {
+                foreach ($brands as $brand => $_) {
+                    // Initialize data
+                    $opening_data[$category][$btl_size][$brand] = 0.00;
+                    $purchase_data[$category][$btl_size][$brand] = 0.00;
+                    $sales_data[$category][$btl_size][$brand] = 0.00;
+
+                    // Calculate opening data from last financial year
+                    $this->calculateOpeningData($category, $btl_size, $brand, $last_financial_year_data, $opening_data);
+
+                    // Process current financial year data
+                    $this->processTransactionData($all_row_data, $category, $btl_size, $brand, $opening_data, $purchase_data, $sales_data);
+                    
+                    // Calculate closing data as opening + purchase - sales
+                    $closing_data[$category][$btl_size][$brand] = $opening_data[$category][$btl_size][$brand] + $purchase_data[$category][$btl_size][$brand] - $sales_data[$category][$btl_size][$brand];
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculate opening data from last financial year
+     */
+    protected function calculateOpeningData($category, $btl_size, $brand, $last_financial_year_data, &$opening_data)
+    {
+        foreach ($last_financial_year_data as $data_value) {
+            $json_data = json_decode($data_value);
+            if (!empty($json_data)) {
+                foreach ($json_data as $json_value) {
+                    if ($json_value->category_name == $category && $json_value->btl_size == $btl_size && $json_value->brand_name == $brand) {
+                        $opening_data[$category][$btl_size][$brand] += ($json_value->transaction_category == 'credit') ? $json_value->qty : -$json_value->qty;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Process transaction data for the current financial year
+     */
+    protected function processTransactionData($row_data, $category, $btl_size, $brand, &$opening_data, &$purchase_data, &$sales_data)
+    {
+        foreach ($row_data as $data_value) {
+            $json_data = json_decode($data_value);
+            if (!empty($json_data)) {
+                foreach ($json_data as $json_value) {
+                    if ($json_value->category_name == $category && $json_value->btl_size == $btl_size && $json_value->brand_name == $brand) {
+                        switch ($json_value->transaction_type) {
+                            case 'purchase':
+                            case 'opening':
+                                $purchase_data[$category][$btl_size][$brand] += ($json_value->transaction_category == 'credit') ? $json_value->qty : -$json_value->qty;
+                                break;
+                            case 'sales':
+                                $sales_data[$category][$btl_size][$brand] += ($json_value->transaction_category == 'debit') ? $json_value->qty : -$json_value->qty;
+                                break;
+                            case 'transfer':
+                                $purchase_data[$category][$btl_size][$brand] += ($json_value->transaction_category == 'credit') ? $json_value->qty : 0.00;
+                                $sales_data[$category][$btl_size][$brand] += ($json_value->transaction_category == 'debit') ? $json_value->qty : 0.00;
+                                break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // public function BrandwiseReport(Request $request)
+    // {
+    //     $json = [];
+    //     $data = [];
+    //     $subtotals = [];
+    //     $categories = Category::where(['status' => 1])->get();
+    //     $company_id = $request->company_id;
+    //     $currentDate = $request->to_date;
+
+    //     // Retrieve all unique btl_size values from the Brand table
+    //     $btlSizes = Brand::distinct()->pluck('btl_size')->toArray();
+
+
+    //     foreach ($categories as $category) {
+    //         $cat_name = $category->name;
+    //         $btls = Brand::where(['category_id' => $category->id])->get();
+    //         //total
+    //         $subtotalOpening = 0;
+    //         $subtotalPurchase = 0;
+    //         $subtotalSales     = 0;
+    //         $subtotalClosing = 0;
+    //         $openSum = 0;
+    //         $open = 0;
+    //         $purchaseSum = 0;
+    //         $totalSum = 0;
+    //         $saleSum = 0;
+    //         $closingSum = 0;
+    //         foreach ($btls as $key2 => $brand) {
+    //             $brand_name = $brand['name'];
+    //             $btl_size = $brand['btl_size'];
+
+
+    //             // opening section
+    //             $opening = DailyOpening::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+    //                 ->whereDate('date', $currentDate)
+    //                 ->select(DB::raw('COALESCE(qty, 0) as qty'))
+    //                 ->first();
+    //             if ($opening)
+    //                 $open = $opening['qty'];
+    //             else
+    //                 $open = 0;
+    //             $openSum = $openSum + $open;
+
+    //             // purchase section
+    //             $purchase = Purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+    //                 ->whereDate('invoice_date', $currentDate)
+
+    //                 ->select(DB::raw('COALESCE(qty, 0) as qty'))
+    //                 ->first();
+    //             if ($purchase)
+    //                 $purchaseQty = $purchase['qty'];
+    //             else
+    //                 $purchaseQty = 0;
+    //             $purchaseSum = $purchaseSum + $purchaseQty;
+
+    //             $total = $purchaseQty + $open;
+    //             if ($total)
+    //                 $totalSum = $totalSum + $total;
+
+    //             // sales
+    //             $sales = Sales::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
+    //                 ->whereDate('sale_date', $currentDate)
+
+    //                 ->select(DB::raw('COALESCE(qty, 0) as qty'))
+    //                 ->first();
+    //             if ($sales)
+    //                 $saleQty = $sales['qty'];
+    //             else
+    //                 $saleQty = 0;
+    //             $saleSum = $saleSum + $saleQty;
+
+    //             // total section
+    //             $closing = $total - $saleQty;
+    //             if ($total)
+    //                 $closingSum = $closingSum + $closing;
+
+
+    //             $open_btl = convertBtlPeg($open, $brand['btl_size'], $brand['peg_size']);
+    //             // total calculation
+    //             $purchase_btl = convertBtlPeg($purchaseQty, $brand['btl_size'], $brand['peg_size']);
+    //             $sale_btl = convertBtlPeg($saleQty, $brand['btl_size'], $brand['peg_size']);
+    //             $closing_btl = convertBtlPeg($closing, $brand['btl_size'], $brand['peg_size']);
+
+    //             $categoryData = [
+    //                 'Category' => $cat_name,
+    //                 'Brand Name' => $brand_name,
+    //                 'TPNo' => '',
+    //             ];
+
+    //             // Add btl_size data to the categoryData array
+    //             foreach ($btlSizes as $size) {
+    //                 if ($size == $btl_size) {
+    //                     $categoryData['opening-' . $size] = $open_btl['btl'] . '.' . $open_btl['peg'];
+    //                 } else {
+    //                     $categoryData['opening-' . $size] = '';
+    //                 }
+    //             }
+    //             foreach ($btlSizes as $size) {
+    //                 if ($size == $btl_size) {
+    //                     $categoryData['purchase-' . $size] = $purchase_btl['btl'] . '.' . $purchase_btl['peg'];
+    //                 } else {
+    //                     $categoryData['purchase-' . $size] = '';
+    //                 }
+    //             }
+    //             foreach ($btlSizes as $size) {
+    //                 if ($size == $btl_size) {
+    //                     $categoryData['sales-' . $size] = $sale_btl['btl'] . '.' . $sale_btl['peg'];
+    //                 } else {
+    //                     $categoryData['sales-' . $size] = '';
+    //                 }
+    //             }
+    //             foreach ($btlSizes as $size) {
+    //                 if ($size == $btl_size) {
+    //                     $categoryData['closingstock-' . $size] = $closing_btl['btl'] . '.' . $closing_btl['peg'];
+    //                 } else {
+    //                     $categoryData['closingstock-' . $size] = '';
+    //                 }
+    //             }
+
+    //             $data[] = $categoryData;
+    //         }
+
+    //         // Calculate subtotals for each btl_size within the category
+    //         $categorySubtotal = [
+    //             'Category' => $cat_name,
+    //             'Brand Name' => 'SUBTOTAL',
+    //             'TPNo' => '',
+    //         ];
+
+    //         // total calculation
+    //         $c_open = convertBtlPeg($openSum, $brand['btl_size'], $brand['peg_size']);
+    //         $c_purchase = convertBtlPeg($purchaseSum, $brand['btl_size'], $brand['peg_size']);
+    //         $c_sale = convertBtlPeg($saleSum, $brand['btl_size'], $brand['peg_size']);
+    //         $c_closing = convertBtlPeg($closingSum, $brand['btl_size'], $brand['peg_size']);
+
+    //         $categoryData = [
+    //             'Category' => $cat_name,
+    //             'Brand Name' => $brand_name,
+    //             'TPNo' => '',
+    //         ];
+
+    //         // Add btl_size data to the categoryData array
+    //         foreach ($btlSizes as $size) {
+    //             if ($size == $btl_size) {
+    //                 $categorySubtotal['opening-' . $size] = $c_open['btl'] . '.' . $c_open['peg'];
+    //             } else {
+    //                 $categorySubtotal['opening-' . $size] = '';
+    //             }
+    //         }
+    //         foreach ($btlSizes as $size) {
+    //             if ($size == $btl_size) {
+    //                 $categorySubtotal['purchase-' . $size] = $c_purchase['btl'] . '.' . $c_purchase['peg'];
+    //             } else {
+    //                 $categorySubtotal['purchase-' . $size] = '';
+    //             }
+    //         }
+    //         foreach ($btlSizes as $size) {
+    //             if ($size == $btl_size) {
+    //                 $categorySubtotal['sales-' . $size] = $c_sale['btl'] . '.' . $c_sale['peg'];
+    //             } else {
+    //                 $categorySubtotal['sales-' . $size] = '';
+    //             }
+    //         }
+    //         foreach ($btlSizes as $size) {
+    //             if ($size == $btl_size) {
+    //                 $categorySubtotal['closingstock-' . $size] = $c_closing['btl'] . '.' . $c_closing['peg'];
+    //             } else {
+    //                 $categorySubtotal['closingstock-' . $size] = '';
+    //             }
+    //         }
+
+    //         $data[] = $categorySubtotal;
+    //     }
+
+    //     $json = $data;
+
+    //     return response()->json($json);
+    // }
 }
