@@ -174,6 +174,8 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
 	Route::post('/DailyReport', [Reports::class, 'DailyReport']);
 	Route::post('/BrandwiseReport', [Reports::class, 'BrandwiseReport']);
 	Route::post('/YearlyReport', [Reports::class, 'YearlyReport']);
+	Route::post('/YearlyComparison', [Reports::class, 'YearlyComparisonReport']);
+	Route::post('/demoYearlyComparison', [Reports::class, 'demoYearlyComparisonReport']);
 	Route::get('/downloadBrands', [Api::class, 'downloadBrands']);
 	// stock
     Route::post('/manage_opening', [Api::class, 'manage_opening']); 
