@@ -2585,6 +2585,7 @@ class Reports extends Controller
         $previousClosing = [];
 
         $categoryBrands = [];
+
         while ($currentDate <= $toDate) {
             $data = [
                 'opening' => [$currentDate => 'Opening'],
@@ -2596,6 +2597,7 @@ class Reports extends Controller
 
             $hasPurchaseOrSaleData = false;
 
+            
             foreach ($categories as $category) {
                 if (!isset($brands[$category->id])) {
                     continue;
@@ -2642,13 +2644,32 @@ class Reports extends Controller
                         continue;
                     }
 
-                    $peg_size = DB::table('brands')->where('category_id', $category->id)->where('btl_size', $btl_size)->select('peg_size')->first();
+                    if(!empty($previousClosing))
+                    {
+                        foreach($previousClosing as $cat_key => $cat_val)
+                        {
+                            if($cat_key == $category->short_name)
+                            {
+                                foreach($cat_val as $btl_size_key => $btl_size_val)
+                                {
+                                    if($btl_size_key == $btl_size)
+                                    {
+                                        $openSum = ($btl_size_val['btl'] * $btl_size_val['btl_size']) + ($btl_size_val['peg'] * $btl_size_val['peg_size']);
+                                    }
+                                }
+                            }
+                        }
+                    }else{
+                        $openSum = $openSum;
+                    }
 
+
+                    $peg_size = DB::table('brands')->where('category_id', $category->id)->where('btl_size', $btl_size)->select('peg_size')->first();
                     $openSumFinal = $openSum ? convertBtlPeg($openSum, $btl_size, $peg_size->peg_size) : ['btl' => 0, 'peg' => 0];
                     $purchaseSumFinal = $purchaseSum ? convertBtlPeg($purchaseSum, $btl_size, $peg_size->peg_size) : ['btl' => 0, 'peg' => 0];
-                    $totalSumFinal = ($openSum + $purchaseSum) ? convertBtlPeg($openSum + $purchaseSum, $btl_size, $peg_size->peg_size) : ['btl' => 0, 'peg' => 0];
+                    $totalSumFinal = convertBtlPeg($openSum + $purchaseSum, $btl_size, $peg_size->peg_size);
                     $saleSumFinal = $saleSum ? convertBtlPeg($saleSum, $btl_size, $peg_size->peg_size) : ['btl' => 0, 'peg' => 0];
-                    $closingSumFinal = $closingSum ? convertBtlPeg($closingSum, $btl_size, $peg_size->peg_size) : ['btl' => 0, 'peg' => 0];
+                    $closingSumFinal = $closingSum ? convertBtlPeg($openSum + $purchaseSum - $saleSum, $btl_size, $peg_size->peg_size) : ['btl' => 0, 'peg' => 0];
                     
                     // Add the calculated data
                     $data['opening'][$category->short_name . '-' . $btl_size] = ($openSumFinal['btl'] || $openSumFinal['peg']) ? $openSumFinal['btl'] . '.' . $openSumFinal['peg'] : '0.00';
@@ -2669,9 +2690,10 @@ class Reports extends Controller
                 $json[] = $data['opening'];
                 $json[] = $data['purchase'];
                 
+                $tpNos = '';
                 // Add TP No information
                 $tpNos = isset($purchasesData[$currentDate]) ? $purchasesData[$currentDate]->pluck('invoice_no')->unique()->implode(', ') : '';
-                $json[] = [$currentDate => 'TP No', 'TP No' => $tpNos ?: '0.00'];
+                $json[] = [$currentDate => 'TP No', 'TP No' => $tpNos ?: ''];
                 
                 $json[] = $data['total'];
                 $json[] = $data['sale'];
@@ -2681,7 +2703,7 @@ class Reports extends Controller
             // Move to the next date
             $currentDate = date('Y-m-d', strtotime($currentDate . '+1 day'));
         }
-
+        
         $get_all_categories = [];
         $get_all_btl_size = [];
 
@@ -2821,9 +2843,9 @@ class Reports extends Controller
             $counter = 0;
 
             foreach ($final_json as $final_json_val) {
+
                 if (isset($final_json_val[$array_val])) {
                     $exists_in_final_json = true;
-
                     // Check if the value at `$array_val` is 'Opening'
                     if ($final_json_val[$array_val] === 'Opening') {
                         $data = [$array_val => 'Opening'] + $previousClosing; // Merge arrays
@@ -2833,10 +2855,12 @@ class Reports extends Controller
 
                     $final_json_to_pass[] = $data;
 
-                    // Update `previousClosing` with non-date keys
-                    foreach ($final_json_val as $prev_key => $prev_val) {
-                        if (!strtotime($prev_key)) {
-                            $previousClosing[$prev_key] = $prev_val;
+                    if ($final_json_val[$array_val] !== 'TP No') {
+                        // Update `previousClosing` with non-date keys
+                        foreach ($final_json_val as $prev_key => $prev_val) {
+                            if (!strtotime($prev_key)) {
+                                $previousClosing[$prev_key] = $prev_val;
+                            }
                         }
                     }
 
@@ -2862,7 +2886,6 @@ class Reports extends Controller
                 }
             }
         }
-
 
         return response()->json($final_json_to_pass);
     }
@@ -3291,170 +3314,170 @@ class Reports extends Controller
         return "{$monthName} - {$year}";
     }
 
-    public function YearlyComparisonReport(Request $request)
-    {
-        $companyId = $request->input('company_id');
-        $currentYear = date('Y');
-        $currentMonth = date('m');
+    // public function YearlyComparisonReport(Request $request)
+    // {
+    //     $companyId = $request->input('company_id');
+    //     $currentYear = date('Y');
+    //     $currentMonth = date('m');
 
-        // Define the financial year
-        if ($currentMonth >= 4) {
-            // Current financial year starts in April of the current year
-            $financialYearStart = $currentYear;
-        } else {
-            // Current financial year starts in April of the previous year
-            $financialYearStart = $currentYear - 1;
-        }
+    //     // Define the financial year
+    //     if ($currentMonth >= 4) {
+    //         // Current financial year starts in April of the current year
+    //         $financialYearStart = $currentYear;
+    //     } else {
+    //         // Current financial year starts in April of the previous year
+    //         $financialYearStart = $currentYear - 1;
+    //     }
         
-        $previousFinancialYearStart = $financialYearStart - 1;
+    //     $previousFinancialYearStart = $financialYearStart - 1;
 
-        // Fetch category names
-        $categories = $this->getCategories();
+    //     // Fetch category names
+    //     $categories = $this->getCategories();
 
-        // Get tables for both financial years with data for this company
-        $tables = $this->getFinancialYearTablesForComparison($companyId, $previousFinancialYearStart, $financialYearStart);
+    //     // Get tables for both financial years with data for this company
+    //     $tables = $this->getFinancialYearTablesForComparison($companyId, $previousFinancialYearStart, $financialYearStart);
 
-        $lastMonthPreviousFinancialYear = '';
-        $firstMonthPreviousFinancialYear = '';
-        $firstMonthCurrentFinancialYear = '';
+    //     $lastMonthPreviousFinancialYear = '';
+    //     $firstMonthPreviousFinancialYear = '';
+    //     $firstMonthCurrentFinancialYear = '';
 
-        if (!empty($tables)) {
-            $last_month = '';
-            $first_month = '';
+    //     if (!empty($tables)) {
+    //         $last_month = '';
+    //         $first_month = '';
         
-            foreach ($tables as $year => $months) {
-                if ($year == ($financialYearStart - 1)) {
-                    $month_keys = array_keys($months);
-                    $last_month = end($month_keys);
-                    $first_month_of_previous_year = reset($month_keys);
-                }
+    //         foreach ($tables as $year => $months) {
+    //             if ($year == ($financialYearStart - 1)) {
+    //                 $month_keys = array_keys($months);
+    //                 $last_month = end($month_keys);
+    //                 $first_month_of_previous_year = reset($month_keys);
+    //             }
                 
-                if ($year == $financialYearStart) {
-                    $month_keys = array_keys($months);
-                    $first_month = reset($month_keys);
-                }
-            }
+    //             if ($year == $financialYearStart) {
+    //                 $month_keys = array_keys($months);
+    //                 $first_month = reset($month_keys);
+    //             }
+    //         }
         
-            // Assign the last month of the previous financial year
-            if ($last_month) {
-                $lastMonthPreviousFinancialYear = (int)$last_month;
-            }
+    //         // Assign the last month of the previous financial year
+    //         if ($last_month) {
+    //             $lastMonthPreviousFinancialYear = (int)$last_month;
+    //         }
         
-            // Assign the last month of the previous financial year
-            if ($first_month_of_previous_year) {
-                $firstMonthPreviousFinancialYear = (int)$first_month_of_previous_year;
-            }
+    //         // Assign the last month of the previous financial year
+    //         if ($first_month_of_previous_year) {
+    //             $firstMonthPreviousFinancialYear = (int)$first_month_of_previous_year;
+    //         }
         
-            if ($first_month) {
-                $firstMonthCurrentFinancialYear = (int)$first_month;
-            }
-        }
+    //         if ($first_month) {
+    //             $firstMonthCurrentFinancialYear = (int)$first_month;
+    //         }
+    //     }
 
-        // Initialize data storage for the report
-        $reportData = [];
-        $allCategories = [];
+    //     // Initialize data storage for the report
+    //     $reportData = [];
+    //     $allCategories = [];
 
-        // Track closing for monthly opening in the next month
-        $monthlyClosingByCategory = [];
+    //     // Track closing for monthly opening in the next month
+    //     $monthlyClosingByCategory = [];
 
-        // Process data for each financial year
-        foreach ($tables as $year => $monthlyTables) {
+    //     // Process data for each financial year
+    //     foreach ($tables as $year => $monthlyTables) {
 
-            foreach ($monthlyTables as $month => $tableName) {
-                // Query data for the company in the table
-                $records = DB::table($tableName)
-                    ->where('company_id', $companyId)
-                    ->get();
+    //         foreach ($monthlyTables as $month => $tableName) {
+    //             // Query data for the company in the table
+    //             $records = DB::table($tableName)
+    //                 ->where('company_id', $companyId)
+    //                 ->get();
 
-                // Call updated calculateMonthlyData function with month and year
-                $monthlyData = $this->calculateMonthlyData($records, $monthlyClosingByCategory, $categories, $month, $year, $firstMonthCurrentFinancialYear, $lastMonthPreviousFinancialYear);
-                // Format month name
-                $monthName = date('M', mktime(0, 0, 0, $month, 1)) . " - " . $year;
+    //             // Call updated calculateMonthlyData function with month and year
+    //             $monthlyData = $this->calculateMonthlyData($records, $monthlyClosingByCategory, $categories, $month, $year, $firstMonthCurrentFinancialYear, $lastMonthPreviousFinancialYear);
+    //             // Format month name
+    //             $monthName = date('M', mktime(0, 0, 0, $month, 1)) . " - " . $year;
 
-                // Organize monthly data under the formatted month name
-                foreach ($monthlyData as $categoryName => $data) {
-                    $reportData[] = [
-                        "Date" => $monthName,
-                        "{$categoryName} - Opening" => $data['opening'],
-                        "{$categoryName} - Purchase" => $data['purchase'],
-                        "{$categoryName} - Sales" => $data['sales'],
-                        "{$categoryName} - Closing" => $data['closing'],
-                    ];
+    //             // Organize monthly data under the formatted month name
+    //             foreach ($monthlyData as $categoryName => $data) {
+    //                 $reportData[] = [
+    //                     "Date" => $monthName,
+    //                     "{$categoryName} - Opening" => $data['opening'],
+    //                     "{$categoryName} - Purchase" => $data['purchase'],
+    //                     "{$categoryName} - Sales" => $data['sales'],
+    //                     "{$categoryName} - Closing" => $data['closing'],
+    //                 ];
 
-                    if (!in_array($categoryName, $allCategories)) {
-                        $allCategories[] = $categoryName;
-                    }
-                }
-            }
-        }
+    //                 if (!in_array($categoryName, $allCategories)) {
+    //                     $allCategories[] = $categoryName;
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        $aggregatedReportData = [];
+    //     $aggregatedReportData = [];
 
-        foreach ($reportData as $entry) {
-            $date = $entry['Date'];
+    //     foreach ($reportData as $entry) {
+    //         $date = $entry['Date'];
 
-            // Initialize the month entry if it doesn't exist
-            if (!isset($aggregatedReportData[$date])) {
-                $aggregatedReportData[$date] = [
-                    'Date' => $date,
-                ];
-            }
+    //         // Initialize the month entry if it doesn't exist
+    //         if (!isset($aggregatedReportData[$date])) {
+    //             $aggregatedReportData[$date] = [
+    //                 'Date' => $date,
+    //             ];
+    //         }
 
-            // Aggregate the quantities for each category
-            foreach ($entry as $key => $value) {
-                if ($key !== 'Date') {
-                    if (!isset($aggregatedReportData[$date][$key])) {
-                        $aggregatedReportData[$date][$key] = 0; // Initialize if not set
-                    }
-                    // Add the quantity
-                    $aggregatedReportData[$date][$key] += $value;
-                }
-            }
-        }
+    //         // Aggregate the quantities for each category
+    //         foreach ($entry as $key => $value) {
+    //             if ($key !== 'Date') {
+    //                 if (!isset($aggregatedReportData[$date][$key])) {
+    //                     $aggregatedReportData[$date][$key] = 0; // Initialize if not set
+    //                 }
+    //                 // Add the quantity
+    //                 $aggregatedReportData[$date][$key] += $value;
+    //             }
+    //         }
+    //     }
 
-        // Final report with all categories for each month
-        $finalReport = [];
-        foreach ($aggregatedReportData as $date => $data) {
-            // Initialize the month entry
-            $finalReport[$date] = ['Date' => $date];
+    //     // Final report with all categories for each month
+    //     $finalReport = [];
+    //     foreach ($aggregatedReportData as $date => $data) {
+    //         // Initialize the month entry
+    //         $finalReport[$date] = ['Date' => $date];
 
-            // Set values for all categories, using 0 if they don't exist in the current month
-            foreach ($allCategories as $category) {
-                $finalReport[$date]["{$category} - Opening"] = $data["{$category} - Opening"] ?? 0;
-                $finalReport[$date]["{$category} - Purchase"] = $data["{$category} - Purchase"] ?? 0;
-                $finalReport[$date]["{$category} - Sales"] = $data["{$category} - Sales"] ?? 0;
-                $finalReport[$date]["{$category} - Closing"] = $data["{$category} - Closing"] ?? 0;
-            }
-        }
+    //         // Set values for all categories, using 0 if they don't exist in the current month
+    //         foreach ($allCategories as $category) {
+    //             $finalReport[$date]["{$category} - Opening"] = $data["{$category} - Opening"] ?? 0;
+    //             $finalReport[$date]["{$category} - Purchase"] = $data["{$category} - Purchase"] ?? 0;
+    //             $finalReport[$date]["{$category} - Sales"] = $data["{$category} - Sales"] ?? 0;
+    //             $finalReport[$date]["{$category} - Closing"] = $data["{$category} - Closing"] ?? 0;
+    //         }
+    //     }
 
-        $orderedReport = [];
+    //     $orderedReport = [];
 
-        // Get the number of months in the previous financial year from first month to December
-        $totalMonths = 12;
+    //     // Get the number of months in the previous financial year from first month to December
+    //     $totalMonths = 12;
 
-        // Alternate between previous and current financial years
-        for ($month = 1; $month <= $totalMonths; $month++) {
-            // Determine the month name for the previous financial year
-            $prevMonthName = date('M', mktime(0, 0, 0, $month, 1)) . " - " . ($previousFinancialYearStart);
-            // Determine the month name for the current financial year
-            $currentMonthName = date('M', mktime(0, 0, 0, $month, 1)) . " - " . ($financialYearStart);
+    //     // Alternate between previous and current financial years
+    //     for ($month = 1; $month <= $totalMonths; $month++) {
+    //         // Determine the month name for the previous financial year
+    //         $prevMonthName = date('M', mktime(0, 0, 0, $month, 1)) . " - " . ($previousFinancialYearStart);
+    //         // Determine the month name for the current financial year
+    //         $currentMonthName = date('M', mktime(0, 0, 0, $month, 1)) . " - " . ($financialYearStart);
             
-            // Add the previous financial year data if it exists
-            if (isset($finalReport[$prevMonthName])) {
-                $orderedReport[] = $finalReport[$prevMonthName];
-            }
+    //         // Add the previous financial year data if it exists
+    //         if (isset($finalReport[$prevMonthName])) {
+    //             $orderedReport[] = $finalReport[$prevMonthName];
+    //         }
             
-            // Add the current financial year data if it exists
-            if (isset($finalReport[$currentMonthName])) {
-                $orderedReport[] = $finalReport[$currentMonthName];
-            }
-        }
+    //         // Add the current financial year data if it exists
+    //         if (isset($finalReport[$currentMonthName])) {
+    //             $orderedReport[] = $finalReport[$currentMonthName];
+    //         }
+    //     }
 
-        // Reindex the result array to get a numeric array instead of an associative one
-        $orderedReport = array_values($orderedReport);
+    //     // Reindex the result array to get a numeric array instead of an associative one
+    //     $orderedReport = array_values($orderedReport);
 
-        return response()->json($orderedReport);
-    }
+    //     return response()->json($orderedReport);
+    // }
 
     /**
      * Fetch all categories and return them as an associative array
@@ -4219,7 +4242,7 @@ class Reports extends Controller
                     if (isset($conflicting_entries[$unique_key]) && $conflicting_entries[$unique_key]['conflict']) {
                         continue; // Skip this entry due to conflict
                     }
-
+                    
                     // Proceed with your original calculation logic
                     if ($json_value->category_name == $category && $json_value->btl_size == $btl_size && $json_value->brand_name == $brand) {
                         switch ($json_value->transaction_type) {
@@ -4421,308 +4444,353 @@ class Reports extends Controller
     //     return response()->json($json);
     // }
 
-    public function demoYearlyComparisonReport(Request $request)
+    public function YearlyComparisonReport(Request $request)
     {
-        $companyId = $request->input('company_id');
-        $fromDate = new DateTime($request->input('from_date'));
-        $toDate = new DateTime($request->input('to_date'));
+        $company_id = $request->input('company_id');
+        $from_date = date('Y-m-d', strtotime($request->input('from_date')));
+        $to_date = date('Y-m-d', strtotime($request->input('to_date')));
 
-        // Adjust dates for previous financial year range
-        $fromDateMinusOneYear = (clone $fromDate)->modify('-1 year');
-        $toDateMinusOneYear = (clone $toDate)->modify('-1 year');
+        // Validate inputs
+        if (is_null($company_id) || is_null($from_date) || is_null($to_date)) {
+            return response()->json(['error' => 'Invalid input'], 400);
+        }
 
-        // Retrieve tables for current and previous financial years
-        $currentFinancialYearTables = $this->demo_yearly_comparison_getYearMonthTables($fromDate, $toDate);
-        $previousFinancialYearTables = $this->demo_yearly_comparison_getPreviousYearTables($currentFinancialYearTables);
+        // Step 1: Fetch all categories
+        $categories = Category::all();
 
-        // Process data for current and previous financial years
-        $result = [
-            'current_financial_year' => $this->demo_yearly_comparison_processTables($companyId, $currentFinancialYearTables, $fromDate, $toDate),
-            'previous_financial_year' => $this->demo_yearly_comparison_processTables($companyId, $previousFinancialYearTables, $fromDateMinusOneYear, $toDateMinusOneYear)
-        ];
+        // Get financial year start for current and previous year
+        $yearData = explode('-', $from_date);
+        $financialYearStart = ($yearData[1] <= 3) ? $yearData[0] - 1 : $yearData[0];
+        $previousFinancialYearStart = $financialYearStart - 1;
 
-        return response()->json($result);
+        // Step 2: Fetch tables for both current and previous financial years
+        $currentYearTables = $this->getFinancialYearTablesForComparisonReport($financialYearStart, $to_date);
+        $previousYearTables = $this->getFinancialYearTablesForComparisonReport($previousFinancialYearStart, date('Y-m-d', strtotime("$from_date -1 year")));
+
+        // Step 3: Calculate opening balances for both years
+        $currentYearOpening = $this->calculateOpeningBalances($currentYearTables, $company_id, $financialYearStart, $from_date, $categories);
+        $previousYearOpening = $this->calculateOpeningBalances($previousYearTables, $company_id, $previousFinancialYearStart, date('Y-m-d', strtotime("$from_date -1 year")), $categories);
+        
+        // Step 4: Fetch purchase and sales data for both years
+        $currentYearPurchase = $this->getPurchaseDataForDateRange($currentYearTables, $company_id, $from_date, $to_date, $categories);
+        $currentYearSales = $this->getSalesDataForDateRange($currentYearTables, $company_id, $from_date, $to_date, $categories);
+
+        $previousYearPurchase = $this->getPurchaseDataForDateRange($previousYearTables, $company_id, date('Y-m-d', strtotime("$from_date -1 year")), date('Y-m-d', strtotime("$to_date -1 year")), $categories);
+        $previousYearSales = $this->getSalesDataForDateRange($previousYearTables, $company_id, date('Y-m-d', strtotime("$from_date -1 year")), date('Y-m-d', strtotime("$to_date -1 year")), $categories);
+
+        // Step 5: Generate daily reports with closing for both years
+        $currentYearData = $this->generateDailyReportWithClosing($from_date, $to_date, $currentYearOpening, $currentYearPurchase, $currentYearSales, $categories);
+        $previousYearData = $this->generateDailyReportWithClosing(date('Y-m-d', strtotime("$from_date -1 year")), date('Y-m-d', strtotime("$to_date -1 year")), $previousYearOpening, $previousYearPurchase, $previousYearSales, $categories);
+
+        // Step 6: Identify and remove categories with only zero values in both years
+        $categoriesToRemove = $this->identifyCategoriesToRemove($categories, $currentYearData, $previousYearData);
+
+        // Remove identified categories from both years
+        $this->removeZeroCategories($currentYearData, $categoriesToRemove);
+        $this->removeZeroCategories($previousYearData, $categoriesToRemove);
+
+        $final_data = $this->formatYearlyComparisonData($currentYearData, $previousYearData);
+        
+        return response()->json($final_data);
     }
 
-    private function demo_yearly_comparison_processTables($companyId, $tables, $fromDate, $toDate)
+    private function identifyCategoriesToRemove($categories, $currentYearData, $previousYearData)
     {
-        $dataByDate = [];
-        $allCategories = [];
-        $lastClosing = [];
-        $firstDayProcessed = false;
+        $categoriesToRemove = [];
+        foreach ($categories as $category) {
+            $categoryName = $category->name;
+            $isAllZero = true;
 
-        // Iterate through each monthly table and retrieve relevant entries
-        foreach ($tables as $table) {
-            if (!Schema::hasTable($table)) {
-                continue;
+            // Check if the category has non-zero values in the current year
+            $isAllZero = $this->checkCategoryValues($currentYearData, $categoryName);
+            
+            // Check if the category has non-zero values in the previous year
+            if ($isAllZero) {
+                $isAllZero = $this->checkCategoryValues($previousYearData, $categoryName);
             }
 
-            $entries = DB::table($table)
-                ->where('company_id', $companyId)
-                ->whereBetween('log_date', [$fromDate->format('Y-m-d'), $toDate->format('Y-m-d')])
-                ->get();
-
-            foreach ($entries as $entry) {
-                $logDate = (new \DateTime($entry->log_date))->format('Y-m-d');
-                $jsonData = json_decode($entry->data, true);
-
-                foreach ($jsonData as $childEntry) {
-                    $categoryName = $childEntry['category_name'];
-                    $transactionType = $childEntry['transaction_type'];
-                    $transactionCategory = $childEntry['transaction_category'];
-                    $qty = $childEntry['qty'];
-
-                    $allCategories[$categoryName] = true;
-
-                    if (!isset($dataByDate[$logDate][$categoryName])) {
-                        // Initialize category values for the first day entry or carry over last closing
-                        if (!$firstDayProcessed) {
-                            $dataByDate[$logDate][$categoryName] = [
-                                'Opening' => $this->calculateOpeningQty($companyId, $categoryName, $logDate, $tables, 'opening'),
-                                'Purchase' => $this->calculateOpeningQty($companyId, $categoryName, $logDate, $tables, 'purchase') + $this->calculateTransferCreditQty($companyId, $categoryName, $logDate, $tables),
-                                'Sales' => $this->calculateSalesQty($companyId, $categoryName, $logDate, $tables, 'sales') + $this->calculateTransferDebitQty($companyId, $categoryName, $logDate, $tables),
-                                'Closing' => 0,
-                            ];
-                            $firstDayProcessed = true;
-                        } else {
-                            $dataByDate[$logDate][$categoryName] = [
-                                'Opening' => $lastClosing[$categoryName] ?? 0,
-                                'Purchase' => 0,
-                                'Sales' => 0,
-                                'Closing' => 0,
-                            ];
-                        }
-                    }
-
-                    // Aggregate data for non-first dates
-                    if ($firstDayProcessed) {
-                        if ($transactionType === 'purchase' || $transactionType === 'opening') {
-                            $dataByDate[$logDate][$categoryName]['Purchase'] += ($transactionCategory === 'credit' ? $qty : -$qty);
-                        } elseif ($transactionType === 'transfer' && $transactionCategory === 'credit') {
-                            $dataByDate[$logDate][$categoryName]['Purchase'] += $qty;
-                        } elseif ($transactionType === 'sales' || ($transactionType === 'transfer' && $transactionCategory === 'debit')) {
-                            $dataByDate[$logDate][$categoryName]['Sales'] += ($transactionCategory === 'debit' ? $qty : -$qty);
-                        }
-                    }
-
-                    // Calculate Closing for each category
-                    $dataByDate[$logDate][$categoryName]['Closing'] = $dataByDate[$logDate][$categoryName]['Opening']
-                        + $dataByDate[$logDate][$categoryName]['Purchase']
-                        - $dataByDate[$logDate][$categoryName]['Sales'];
-
-                    $lastClosing[$categoryName] = $dataByDate[$logDate][$categoryName]['Closing'];
-                }
+            if ($isAllZero) {
+                $categoriesToRemove[] = $categoryName;
             }
         }
-
-        // Generate full sequential date range from `fromDate` to `toDate`
-        $allCategories = array_keys($allCategories);
-        $dateRange = new \DatePeriod($fromDate, new \DateInterval('P1D'), (clone $toDate)->modify('+1 day'));
-
-        foreach ($dateRange as $date) {
-            $logDate = $date->format('Y-m-d');
-            foreach ($allCategories as $categoryName) {
-                if (!isset($dataByDate[$logDate][$categoryName])) {
-                    $opening = $lastClosing[$categoryName] ?? 0;
-                    $dataByDate[$logDate][$categoryName] = [
-                        'Opening' => $opening,
-                        'Purchase' => 0,
-                        'Sales' => 0,
-                        'Closing' => $opening,
-                    ];
-                }
-
-                $dataByDate[$logDate][$categoryName]['Closing'] = $dataByDate[$logDate][$categoryName]['Opening']
-                    + $dataByDate[$logDate][$categoryName]['Purchase']
-                    - $dataByDate[$logDate][$categoryName]['Sales'];
-
-                $lastClosing[$categoryName] = $dataByDate[$logDate][$categoryName]['Closing'];
-            }
-        }
-
-        // Format dates for response in a sequential way
-        $formattedData = [];
-        foreach ($dataByDate as $date => $categories) {
-            $formattedDate = (new \DateTime($date))->format('d M Y');
-            $formattedData[$formattedDate] = $categories;
-        }
-
-        return $formattedData;
+        return $categoriesToRemove;
     }
 
-    private function demo_yearly_comparison_getYearMonthTables($fromDate, $toDate)
+    private function checkCategoryValues($yearData, $categoryName)
+    {
+        foreach ($yearData as $dateData) {
+            if (isset($dateData['categories'][$categoryName]) &&
+                ($dateData['categories'][$categoryName]['opening'] != 0 ||
+                $dateData['categories'][$categoryName]['purchase'] != 0 ||
+                $dateData['categories'][$categoryName]['sales'] != 0 ||
+                $dateData['categories'][$categoryName]['closing'] != 0)
+            ) {
+                return false; // Non-zero value found
+            }
+        }
+        return true; // All zero
+    }
+
+    private function removeZeroCategories(&$yearData, $categoriesToRemove)
+    {
+        foreach ($yearData as &$dateData) {
+            foreach ($categoriesToRemove as $categoryName) {
+                unset($dateData['categories'][$categoryName]);
+            }
+        }
+    }
+
+    private function getFinancialYearTablesForComparisonReport($financialYearStart, $to_date)
     {
         $tables = [];
-        $date = clone $fromDate;
+        
+        // Start from April 1st of the given financial year
+        $current = date('Y-m-d', strtotime("$financialYearStart-04-01"));
+        $to_date = date('Y-m-d', strtotime($to_date));
 
-        while ($date <= $toDate) {
-            $tables[] = $date->format('Y_m') . '_log_data';
-            $date->modify('+1 month');
+        while ($current <= $to_date) {
+            // Format the table name as 'YYYY_MM_log_data'
+            $tableName = date('Y_m', strtotime($current)) . '_log_data';
+
+            // Check if the table exists in the database
+            if (Schema::hasTable($tableName)) {
+                $tables[] = $tableName;
+            }
+
+            // Move to the next month
+            $current = date('Y-m-d', strtotime("$current +1 month"));
         }
 
         return $tables;
     }
 
-    private function demo_yearly_comparison_getPreviousYearTables($currentFinancialYearTables)
+    private function calculateOpeningBalances($tables, $company_id, $financialYearStart, $from_date, $categories)
     {
-        $previousFinancialYearTables = [];
+        $openingBalances = [];
 
-        foreach ($currentFinancialYearTables as $table) {
-            $tableParts = explode('_', $table);
-            $previousYear = (int)$tableParts[0] - 1;
-            $table_name = $previousYear . '_' . $tableParts[1] . '_log_data';
+        foreach ($categories as $category) {
+            $openingQty = 0;
 
-            if (Schema::hasTable($table_name)) {
-                $previousFinancialYearTables[] = $table_name;
-            }
-        }
+            foreach ($tables as $table) {
+                $records = DB::table($table)
+                    ->where('company_id', $company_id)
+                    ->where('log_date', '>=', $financialYearStart)
+                    ->where('log_date', '<', $from_date)
+                    ->select('data')
+                    ->get();
 
-        return $previousFinancialYearTables;
-    }
+                foreach ($records as $record) {
+                    $dataEntries = json_decode($record->data, true);
 
-    // Additional helper methods to handle specific calculations
-    private function calculateOpeningQty($companyId, $categoryName, $date, $tables, $transactionType)
-    {
-        $qty = 0;
-
-        $record_of_this_date = DB::table($tables[0])
-                                ->where('company_id', $companyId)
-                                ->where('log_date', $date)
-                                ->select('data')
-                                ->get();
-
-        if(!empty($record_of_this_date))
-        {
-            foreach($record_of_this_date as $key => $value)
-            {
-                $data = json_decode($value->data, true);
-
-                if(!empty($data))
-                {
-                    foreach($data as $dkey => $dvalue)
-                    {
-                        if($dvalue['transaction_type'] == 'opening' && $dvalue['category_name'] == $categoryName)
-                        {
-                            if($dvalue['transaction_category'] == 'credit')
-                            {
-                                $qty = $dvalue['qty'] + $qty;
-                            }else{
-                                $qty = $qty - $dvalue['qty'];
+                    foreach ($dataEntries as $entry) {
+                        if ($entry['category_id'] == $category->id) {
+                            $qty = $entry['qty'];
+                            if ($entry['transaction_category'] == 'credit') {
+                                $openingQty += $qty;
+                            } elseif ($entry['transaction_category'] == 'debit') {
+                                $openingQty -= $qty;
                             }
                         }
                     }
                 }
             }
+
+            // Store the result for this category
+            $openingBalances[$category->name] = $openingQty;
         }
 
-        return $qty;
+        return $openingBalances;
     }
 
-    private function calculateTransferCreditQty($companyId, $categoryName, $date, $tables)
+    private function getPurchaseDataForDateRange($tables, $company_id, $from_date, $to_date, $categories)
     {
-        $qty = 0;
+        $purchaseData = [];
+        $currentDate = $from_date;
 
-        $record_of_this_date = DB::table($tables[0])
-                                ->where('company_id', $companyId)
-                                ->where('log_date', $date)
-                                ->select('data')
-                                ->get();
+        while ($currentDate <= $to_date) {
+            $dateData = [];
 
-        if(!empty($record_of_this_date))
-        {
-            foreach($record_of_this_date as $key => $value)
-            {
-                $data = json_decode($value->data, true);
+            foreach ($categories as $category) {
+                $purchaseQty = 0;
 
-                if(!empty($data))
-                {
-                    foreach($data as $dkey => $dvalue)
-                    {
-                        if($dvalue['transaction_type'] == 'transfer' && $dvalue['category_name'] == $categoryName)
-                        {
-                            if($dvalue['transaction_category'] == 'credit')
+                foreach ($tables as $table) {
+                    $records = DB::table($table)
+                        ->where('company_id', $company_id)
+                        ->where('log_date', $currentDate)
+                        ->select('data')
+                        ->get();
+
+                    foreach ($records as $record) {
+                        $dataEntries = json_decode($record->data, true);
+
+                        foreach ($dataEntries as $entry) {
+                            if ($entry['category_id'] == $category->id)
                             {
-                                $qty = $dvalue['qty'] + $qty;
+                                if($entry['transaction_type'] == 'purchase' || $entry['transaction_type'] == 'opening')
+                                {
+                                    if($entry['transaction_category'] == 'credit')
+                                    {
+                                        $purchaseQty += $entry['qty'];
+                                    }else{
+                                        $purchaseQty -= $entry['qty'];
+                                    }
+                                }
+
+                                if($entry['transaction_type'] == 'transfer' && $entry['transaction_category'] == 'credit')
+                                {
+                                    $purchaseQty += $entry['qty'];
+                                }
                             }
                         }
                     }
                 }
+
+                // Add purchase quantity for the category on the current date
+                $dateData[$category->name] = $purchaseQty;
             }
+
+            // Store the data for the current date
+            $purchaseData[$currentDate] = $dateData;
+
+            // Move to the next date
+            $currentDate = date('Y-m-d', strtotime("$currentDate +1 day"));
         }
 
-        return $qty;
+        return $purchaseData;
     }
 
-    private function calculateTransferDebitQty($companyId, $categoryName, $date, $tables)
+    private function getSalesDataForDateRange($tables, $company_id, $from_date, $to_date, $categories)
     {
-        $qty = 0;
+        $salesData = [];
+        $currentDate = $from_date;
 
-        $record_of_this_date = DB::table($tables[0])
-                                ->where('company_id', $companyId)
-                                ->where('log_date', $date)
-                                ->select('data')
-                                ->get();
+        while ($currentDate <= $to_date) {
+            $dateData = [];
 
-        if(!empty($record_of_this_date))
-        {
-            foreach($record_of_this_date as $key => $value)
-            {
-                $data = json_decode($value->data, true);
+            foreach ($categories as $category) {
+                $salesQty = 0;
 
-                if(!empty($data))
-                {
-                    foreach($data as $dkey => $dvalue)
-                    {
-                        if($dvalue['transaction_type'] == 'transfer' && $dvalue['category_name'] == $categoryName)
-                        {
-                            if($dvalue['transaction_category'] == 'debit')
+                foreach ($tables as $table) {
+                    $records = DB::table($table)
+                        ->where('company_id', $company_id)
+                        ->where('log_date', $currentDate)
+                        ->select('data')
+                        ->get();
+
+                    foreach ($records as $record) {
+                        $dataEntries = json_decode($record->data, true);
+                        
+                        foreach ($dataEntries as $entry) {
+                            if ($entry['category_id'] == $category->id)
                             {
-                                $qty = $dvalue['qty'] + $qty;
+                                if($entry['transaction_type'] == 'sales')
+                                {
+                                    if($entry['transaction_category'] == 'debit')
+                                    {
+                                        $salesQty += $entry['qty'];
+                                    }else{
+                                        $salesQty -= $entry['qty'];
+                                    }
+                                }
+
+                                if($entry['transaction_type'] == 'transfer' && $entry['transaction_category'] == 'debit')
+                                {
+                                    $salesQty += $entry['qty'];
+                                }
                             }
                         }
                     }
                 }
+
+                // Add purchase quantity for the category on the current date
+                $dateData[$category->name] = $salesQty;
             }
+
+            // Store the data for the current date
+            $salesData[$currentDate] = $dateData;
+
+            // Move to the next date
+            $currentDate = date('Y-m-d', strtotime("$currentDate +1 day"));
         }
 
-        return $qty;
+        return $salesData;
     }
 
-    private function calculateSalesQty($companyId, $categoryName, $date, $tables, $transactionType)
+    private function generateDailyReportWithClosing($from_date, $to_date, $openingBalances, $purchaseData, $salesData, $categories)
     {
-        $qty = 0;
+        $dailyReport = [];
+        $currentDate = $from_date;
+        $previousClosingBalances = $openingBalances;
 
-        $record_of_this_date = DB::table($tables[0])
-                                ->where('company_id', $companyId)
-                                ->where('log_date', $date)
-                                ->select('data')
-                                ->get();
+        while ($currentDate <= $to_date) {
+            $dateData = ['date' => $currentDate];
 
-        if(!empty($record_of_this_date))
-        {
-            foreach($record_of_this_date as $key => $value)
-            {
-                $data = json_decode($value->data, true);
+            foreach ($categories as $category) {
+                $categoryName = $category->name;
+                $openingQty = $previousClosingBalances[$categoryName] ?? 0;
 
-                if(!empty($data))
-                {
-                    foreach($data as $dkey => $dvalue)
-                    {
-                        if($dvalue['transaction_type'] == 'sales' && $dvalue['category_name'] == $categoryName)
-                        {
-                            if($dvalue['transaction_category'] == 'debit')
-                            {
-                                $qty = $dvalue['qty'] + $qty;
-                            }else{
-                                $qty = $qty - $dvalue['qty'];
-                            }
-                        }
-                    }
-                }
+                // Get purchase and sales data for the current date
+                $purchaseQty = $purchaseData[$currentDate][$categoryName] ?? 0;
+                $salesQty = $salesData[$currentDate][$categoryName] ?? 0;
+
+                // Calculate closing quantity
+                $closingQty = $openingQty + $purchaseQty - $salesQty;
+
+                // Store data in the report for this category
+                $dateData['categories'][$categoryName] = [
+                    'opening' => $openingQty,
+                    'purchase' => $purchaseQty,
+                    'sales' => $salesQty,
+                    'closing' => $closingQty,
+                ];
+
+                // Update previous closing balances
+                $previousClosingBalances[$categoryName] = $closingQty;
             }
+
+            // Add the data for the current date to the report
+            $dailyReport[] = $dateData;
+
+            // Move to the next date
+            $currentDate = date('Y-m-d', strtotime("$currentDate +1 day"));
         }
 
-        return $qty;
+        return $dailyReport;
+    }
+
+    public function formatYearlyComparisonData($currentYearData, $previousYearData)
+    {
+        $finalResult = [];
+
+        $dates = array_keys($currentYearData); // Assumes currentYearData and previousYearData have the same dates
+
+        foreach ($dates as $date) {
+            $currentYearDateData = $currentYearData[$date];
+            $previousYearDateData = $previousYearData[$date];
+
+            // Format for current year's date
+            $currentYearFormattedData = ['Date' => date('d-M-y', strtotime($currentYearDateData['date']))];
+
+            foreach ($currentYearDateData['categories'] as $categoryName => $categoryData) {
+                $currentYearFormattedData["{$categoryName} - Opening"] = $categoryData['opening'];
+                $currentYearFormattedData["{$categoryName} - Purchase"] = $categoryData['purchase'];
+                $currentYearFormattedData["{$categoryName} - Sales"] = $categoryData['sales'];
+                $currentYearFormattedData["{$categoryName} - Closing"] = $categoryData['closing'];
+            }
+            $finalResult[] = $currentYearFormattedData;
+
+            // Format for previous year's date
+            $previousYearFormattedData = ['Date' => date('d-M-y', strtotime($previousYearDateData['date']))];
+            foreach ($previousYearDateData['categories'] as $categoryName => $categoryData) {
+                $previousYearFormattedData["{$categoryName} - Opening"] = $categoryData['opening'];
+                $previousYearFormattedData["{$categoryName} - Purchase"] = $categoryData['purchase'];
+                $previousYearFormattedData["{$categoryName} - Sales"] = $categoryData['sales'];
+                $previousYearFormattedData["{$categoryName} - Closing"] = $categoryData['closing'];
+            }
+            $finalResult[] = $previousYearFormattedData;
+        }
+
+        return $finalResult;
     }
 
 }
