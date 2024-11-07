@@ -1747,7 +1747,7 @@ class Reports extends Controller
         $fromDate = $request->from_date;
         $toDate = $request->to_date;
 
-        // Fetch all categories that are active
+        // Fetch all active categories
         $categories = Category::where(['status' => 1])->get();
 
         // Collect all unique category names
@@ -1755,14 +1755,15 @@ class Reports extends Controller
         
         if (!empty($categories)) {
             foreach ($categories as $key => $value) {
-                // Fetch sales data based on the category and date range
+                // Fetch sales data based on category and date range
                 $sales = DB::table('sales')
                             ->select(
-                                DB::raw('COALESCE(SUM(qty), 0) as totalSaleQty'),
+                                'sales.id',
                                 'sales.category_id',
                                 'categories.name',
                                 'sales.brand_id',
-                                'sales.sale_date'
+                                'sales.sale_date',
+                                'sales.qty'
                             )
                             ->join('categories', 'categories.id', '=', 'sales.category_id')
                             ->where('sales.company_id', $company_id)
@@ -1771,12 +1772,11 @@ class Reports extends Controller
                             ->where('sales.category_id', $value->id)
                             ->whereDate('sales.sale_date', '>=', $fromDate)
                             ->whereDate('sales.sale_date', '<=', $toDate)
-                            ->groupBy('sales.category_id', 'categories.name', 'sales.sale_date')
                             ->get();
 
                 foreach ($sales as $sale) {
                     if (!empty($sale)) {
-                        // Fetch the selling price for both bottle and peg
+                        // Fetch the selling price for bottle and peg
                         $peg_and_btl_selling_price = DB::table('stocks')
                                                         ->where('company_id', $company_id)
                                                         ->where('brand_id', $sale->brand_id)
@@ -1786,17 +1786,17 @@ class Reports extends Controller
                                                         ->first();
 
                         if (!empty($peg_and_btl_selling_price)) {
-                            // Fetch bottle and peg size to calculate the total price
+                            // Fetch bottle and peg size to calculate total price
                             $btl_peg_size = DB::table('brands')->where('id', $sale->brand_id)->select('btl_size', 'peg_size')->first();
 
                             if (!empty($btl_peg_size)) {
-                                $stockInBtlPeg = convertBtlPeg((int)$sale->totalSaleQty, $btl_peg_size->btl_size, $btl_peg_size->peg_size);
+                                $stockInBtlPeg = convertBtlPeg((int)$sale->qty, $btl_peg_size->btl_size, $btl_peg_size->peg_size);
                                 $sale_price = intval($peg_and_btl_selling_price->btl_selling_price) * intval($stockInBtlPeg['btl']) 
                                             + intval($peg_and_btl_selling_price->peg_selling_price) * intval($stockInBtlPeg['peg']);
                             }
                         }
 
-                        // Assign data for each sale date and category
+                        // Accumulate data for each sale date and category
                         $category_name = $sale->name;
                         $sale_date = $sale->sale_date;
 
@@ -1808,123 +1808,76 @@ class Reports extends Controller
                             $data[$sale_date][$category_name] = 0;
                         }
 
+                        // Sum the sale prices for each date/category
                         $data[$sale_date][$category_name] += $sale_price;
                     }
                 }
             }
         }
 
-        
-        // Ensure all dates have all categories and initialize with 0 if not present
+        // Ensure all dates have all categories with 0 if not present
         foreach ($data as $sale_date => $values) {
             foreach ($allCategories as $category_name) {
                 if (!isset($data[$sale_date][$category_name])) {
                     $data[$sale_date][$category_name] = 0;
                 }
             }
-
-            $data[$sale_date] = array_replace(array_flip(array_values($allCategories)), $data[$sale_date]);
         }
 
-        // Remove rows (dates) where all category sales prices are 0
+        // Remove dates with total sales of 0 across all categories
         $data = array_filter($data, function ($values) {
             return array_sum($values) > 0;
         });
 
-        // Calculate totals and remove categories with 0 sales across all dates
-        $total = [];
+        // Calculate totals
         $categoryTotals = array_fill_keys(array_values($allCategories), 0);
 
         foreach ($data as $sale_date => $values) {
-            // Sort values to maintain order of categories
+            // Sort values to maintain category order
             ksort($values);
 
-            // Track categories with non-zero values
+            // Track non-zero category totals
             foreach ($values as $category_name => $sale_price) {
                 if ($sale_price > 0) {
-                    $categoryTotals[$category_name] += (int)$sale_price;
+                    $categoryTotals[$category_name] += $sale_price;
                 }
             }
         }
 
-        // Remove categories with no sales data across all dates
+        // Filter categories with zero sales across all dates
         $categoryTotals = array_filter($categoryTotals, function ($total) {
             return $total > 0;
         });
         
-        // Rebuild data with remaining categories only
+        // Prepare final data for response
         $finalData = [];
         foreach ($data as $sale_date => $values) {
             $filteredValues = array_intersect_key($values, $categoryTotals);
 
             if (!empty($filteredValues)) {
-                // Replace 0 with an empty string and format sale prices to 2 decimal places
                 $filteredValues = array_map(function ($value) {
                     return $value > 0 ? number_format($value, 2, '.', '') : '';
                 }, $filteredValues);
 
-                // Create the row for each date
                 $entry = ['' => $sale_date] + $filteredValues;
-                $entry['Total'] = number_format(array_sum(array_map('intval', $filteredValues)), 2, '.', '');  // Vertical total (total per date)
+                $entry['Total'] = number_format(array_sum(array_map('intval', $filteredValues)), 2, '.', '');
                 $finalData[] = $entry;
             }
         }
 
-        // Add the horizontal total row if there are remaining categories
+        // Add horizontal total row
         if (!empty($categoryTotals)) {
-            // Sort totals to match the order of categories
             ksort($categoryTotals);
-
             $totalEntry = ['' => 'Total'] + array_map(function ($value) {
                 return $value > 0 ? number_format($value, 2, '.', '') : '';
             }, $categoryTotals);
-            $totalEntry['Total'] = number_format(array_sum($categoryTotals), 2, '.', '');  // Grand total across all categories and dates
+            $totalEntry['Total'] = number_format(array_sum($categoryTotals), 2, '.', '');
             $finalData[] = $totalEntry;
         }
-
-        if (!empty($finalData)) {
-            // Get the keys from the first date's data
-            $firstDateData = $finalData[0];
-            $key_sequence = [];
         
-            if (!empty($firstDateData)) {
-                foreach ($firstDateData as $firstKey => $firstValue) {
-                    if ($firstKey !== '' && $firstKey !== 'Total') {
-                        $key_sequence[] = $firstKey; // Collect keys excluding '' and 'Total'
-                    }
-                }
-            }
-        
-            // Get the last date's data and rearrange according to key_sequence
-            $lastDateData = end($finalData);
-            if (!empty($lastDateData)) {
-                $arrangedLastDateData = [];
-        
-                // Preserve the 'Total' key and value if it exists
-                $totalValue = isset($lastDateData['Total']) ? $lastDateData['Total'] : '';
-        
-                // Include the empty key with value 'Total'
-                $arrangedLastDateData[''] = 'Total';  // Adding the special case for empty key
-                
-                // Arrange data according to the key_sequence
-                foreach ($key_sequence as $key) {
-                    $arrangedLastDateData[$key] = isset($lastDateData[$key]) ? $lastDateData[$key] : '';
-                }
-        
-                // Set the total key and value back
-                $arrangedLastDateData['Total'] = $totalValue; // Keep the Total value unchanged
-        
-                // Replace the last entry in finalData with the arranged data
-                $finalData[count($finalData) - 1] = $arrangedLastDateData;
-        
-                // Now $finalData has the last entry replaced with the arranged data
-            }
-        }        
-        
-        return $finalData;
-
         return response()->json($finalData);
     }
+
 
 
 
@@ -3814,7 +3767,7 @@ class Reports extends Controller
         // Process current and last financial year data
         $all_category_brands = $this->processRowData($all_row_data);
         $last_financial_year_all_category_brands = $this->processRowData($last_financial_year_all_row_data);
-
+         
         // Calculate opening, purchase, sales, and closing data
         $this->calculateBrandwiseData($all_category_brands, $all_row_data, $last_financial_year_all_category_brands, $last_financial_year_all_row_data, $opening_data, $purchase_data, $sales_data, $closing_data);
 
@@ -4169,7 +4122,7 @@ class Reports extends Controller
                     }
                     if($json_value->transaction_type == 'purchase'){
                         // Only add tp_no if it's not null
-                        if (!is_null($json_value->tp_no)) {
+                        if (!is_null($json_value->tp_no) && !str_contains($brand_tp_data[$json_value->brand_name], $json_value->tp_no)) {
                             // Concatenate the tp_no to the existing string with a comma separator
                             if (!empty($brand_tp_data[$json_value->brand_name])) {
                                 $brand_tp_data[$json_value->brand_name] .= ', ';
@@ -4202,67 +4155,71 @@ class Reports extends Controller
     }
 
     /**
-     * Process transaction data for the current financial year
+     * Process transaction data f00or the current financial year
      */
     protected function processTransactionData($row_data, $category, $btl_size, $brand, &$opening_data, &$purchase_data, &$sales_data)
     {
-        $conflicting_entries = [];
+        $transaction_counts = [];
 
+        // First pass to aggregate counts of credits and debits for each unique key
         foreach ($row_data as $data_value) {
             $json_data = json_decode($data_value);
             if (!empty($json_data)) {
                 foreach ($json_data as $json_value) {
-                    // Create a unique key for the current entry
+                    // Create a unique key based on transaction details
                     $unique_key = "{$json_value->transaction_type}_{$json_value->transaction_table_id}_{$json_value->brand_name}_{$json_value->qty}";
 
-                    // Track the entry in the conflicting_entries array
-                    if (isset($conflicting_entries[$unique_key])) {
-                        // If we already have this key, it means we found a conflict
-                        $conflicting_entries[$unique_key]['conflict'] = true;
-                    } else {
-                        // Initialize with the transaction category
-                        $conflicting_entries[$unique_key] = [
+                    // Initialize or update the counts for credit/debit per unique key
+                    if (!isset($transaction_counts[$unique_key])) {
+                        $transaction_counts[$unique_key] = [
+                            'credit' => 0,
+                            'debit' => 0,
                             'transaction_category' => $json_value->transaction_category,
-                            'conflict' => false
+                            'json_value' => $json_value
                         ];
                     }
+
+                    // Increment credit or debit count based on transaction category
+                    if ($json_value->transaction_category === 'credit') {
+                        $transaction_counts[$unique_key]['credit']++;
+                    } elseif ($json_value->transaction_category === 'debit') {
+                        $transaction_counts[$unique_key]['debit']++;
+                    }
                 }
             }
         }
 
-        // Now loop through the original data to calculate quantities, skipping conflicts
-        foreach ($row_data as $data_value) {
-            $json_data = json_decode($data_value);
-            if (!empty($json_data)) {
-                foreach ($json_data as $json_value) {
-                    // Create the same unique key
-                    $unique_key = "{$json_value->transaction_type}_{$json_value->transaction_table_id}_{$json_value->brand_name}_{$json_value->qty}";
+        // Second pass to process non-cancelled transactions
+        foreach ($transaction_counts as $unique_key => $count_data) {
+            $json_value = $count_data['json_value'];
 
-                    // Check if there's a conflict for this entry
-                    if (isset($conflicting_entries[$unique_key]) && $conflicting_entries[$unique_key]['conflict']) {
-                        continue; // Skip this entry due to conflict
-                    }
-                    
-                    // Proceed with your original calculation logic
-                    if ($json_value->category_name == $category && $json_value->btl_size == $btl_size && $json_value->brand_name == $brand) {
-                        switch ($json_value->transaction_type) {
-                            case 'purchase':
-                            case 'opening':
-                                $purchase_data[$category][$btl_size][$brand] += ($json_value->transaction_category == 'credit') ? $json_value->qty : -$json_value->qty;
-                                break;
-                            case 'sales':
-                                $sales_data[$category][$btl_size][$brand] += ($json_value->transaction_category == 'debit') ? $json_value->qty : -$json_value->qty;
-                                break;
-                            case 'transfer':
-                                $purchase_data[$category][$btl_size][$brand] += ($json_value->transaction_category == 'credit') ? $json_value->qty : 0.00;
-                                $sales_data[$category][$btl_size][$brand] += ($json_value->transaction_category == 'debit') ? $json_value->qty : 0.00;
-                                break;
+            // Determine the net count after canceling pairs of credits and debits
+            $net_count = $count_data['credit'] - $count_data['debit'];
+
+            // Only process if there's a remaining quantity after canceling out pairs
+            if ($net_count !== 0 && $json_value->category_name == $category && $json_value->btl_size == $btl_size && $json_value->brand_name == $brand) {
+                $remaining_qty = abs($net_count) * $json_value->qty;
+                $transaction_type = $json_value->transaction_type;
+
+                // Proceed with calculation logic based on remaining category (credit or debit)
+                switch ($transaction_type) {
+                    case 'purchase':
+                    case 'opening':
+                        $purchase_data[$category][$btl_size][$brand] += ($net_count > 0) ? $remaining_qty : -$remaining_qty;
+                        break;
+                    case 'sales':
+                        $sales_data[$category][$btl_size][$brand] += ($net_count < 0) ? $remaining_qty : -$remaining_qty;
+                        break;
+                    case 'transfer':
+                        if ($net_count > 0) {
+                            $purchase_data[$category][$btl_size][$brand] += $remaining_qty;
+                        } else {
+                            $sales_data[$category][$btl_size][$brand] += $remaining_qty;
                         }
-                    }
+                        break;
                 }
             }
         }
-
     }
 
     // public function BrandwiseReport(Request $request)

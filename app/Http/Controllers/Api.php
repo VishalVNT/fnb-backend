@@ -1363,7 +1363,7 @@ class Api extends Controller
                                     $data_for_log_data['category_short_name'] = $category_details->short_name;
                                     $data_for_log_data['btl_size'] = $peg_size['btl_size'];
                                     $data_for_log_data['peg_size'] = $peg_size['peg_size'];
-                                    $data_for_log_data['qty'] = $MlSize;
+                                    $data_for_log_data['qty'] = $data['qty'];
                                     $data_for_log_data['purchase_price'] = NULL;
                                     $data_for_log_data['vendor_id'] = NULL;
                                     $data_for_log_data['vendor_name'] = NULL;
@@ -5011,6 +5011,7 @@ class Api extends Controller
 		$skipped = 0;
         $counter = 0;
 		$failed_data=[];
+
 		foreach($dataArray as $dataArr){
 			$brandName = $dataArr['brand'];
 			$cost = $dataArr['cost'];
@@ -5019,7 +5020,17 @@ class Api extends Controller
 			$brandSize = Brand::select('id')->where([['name', 'like', '%' . $brandName . '%']])->get();
 			if (!empty($brandSize)) {
 				// update existing entry
-				$update=Stock::where(['company_id' => $company_id,  'brand_id' => $brandSize[0]['id']])->update(['cost_price' => $cost, 'btl_selling_price' => $btl_sell]);
+                $brand_bottle_and_peg_size = Brand::select('btl_size','peg_size')->where('id',$brandSize[0]['id'])->first();
+
+                $peg_selling_price = 0;
+                if(!empty($brand_bottle_and_peg_size)){
+                    $btl_size = $brand_bottle_and_peg_size->btl_size;
+                    $peg_size = $brand_bottle_and_peg_size->peg_size;
+                    $bottle_selling_price = $btl_sell;
+                    $peg_selling_price = $bottle_selling_price/($btl_size/$peg_size);
+                }
+
+				$update=Stock::where(['company_id' => $company_id,  'brand_id' => $brandSize[0]['id']])->update(['cost_price' => $cost, 'btl_selling_price' => $btl_sell, 'peg_selling_price' => $peg_selling_price]);
 				if($update)
 				$counter++;
 				else{
