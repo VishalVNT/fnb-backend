@@ -439,6 +439,7 @@ class Api extends Controller
     public function updateCategory(Request $request)
     {
         $data = $request->validate([
+            'parent_category_name' => 'required|string',
             'name' => 'required|string',
             'short_name' => 'required|string',
         ]);
@@ -1309,10 +1310,10 @@ class Api extends Controller
                             if($stocks[0]['qty'] >= $qty){
     
                                 $btl = 0;
-                                while ($qty >= $peg_size['btl_size']) {
-                                    $qty = $qty - $peg_size['btl_size'];
-                                    $btl++;
-                                }
+                                // while ($qty >= $peg_size['btl_size']) {
+                                //     $qty = $qty - $peg_size['btl_size'];
+                                //     $btl++;
+                                // }
                                 $peg = $qty / $peg_size['peg_size'];
                                 $data['sale_price'] = ($btl * $stocks[0]['btl_selling_price']) + ($peg * $stocks[0]['peg_selling_price']);
                                 $data['no_peg'] = $peg;
@@ -2716,21 +2717,21 @@ class Api extends Controller
 
                 $stockEntry = Purchase::select('no_btl')->where(['purchase_list_id' => $request->purchase_list_id, 'brand_id' => $data['brand_id']])->get();
                 if (count($stockEntry) > 0) {
-                    $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $request->brand_id])->get()->count();
+                    $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $data['brand_id']])->get()->count();
                     $brandSize = Brand::select('btl_size')->where('id', $data['brand_id'])->get();
                     $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
-                    $OldMlSize = ($brandSize[0]['btl_size'] * $stockEntry[0]['no_btl']);
+                    $OldMlSize = ($brandSize[0]['btl_size'] * $purchaseDataForLogUpdate->no_btl);
                     if ($count > 0) {
-                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->decrement('qty', intval($OldMlSize));
+                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', intval($OldMlSize));
                         //update stock
-                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $request->brand_id])->increment('qty', intval($MlSize));
+                        Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->increment('qty', intval($MlSize));
                     } else {
                         //Stock entry
                         $stock = new Stock(array(
                             'company_id' => $request->company_id,
                             //'branch_id' => $request->branch_id,
                             'category_id' => $request->category_id,
-                            'brand_id' => $request->brand_id,
+                            'brand_id' => $data['brand_id'],
                             'qty' => $MlSize,
                             'cost_price' => $request->mrp,
                         ));
@@ -2822,7 +2823,6 @@ class Api extends Controller
 
                         DB::table($log_data_table_name)->insert($logData);
                     }
-
                     $count = Stock::where(['company_id' => $request->company_id, 'brand_id' => $data['brand_id']])->get()->count();
                     if ($count > 0)
                         Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->increment('qty', intval($MlSize));
@@ -5075,6 +5075,7 @@ class Api extends Controller
         $purchaseList = [];
         $purchaseCount = [];
         $failedData = [];
+        $totalAmount = 0;
 
         foreach ($dataArray as $dataArr) {
             $brandName = $dataArr['brand'];
@@ -5104,8 +5105,9 @@ class Api extends Controller
             
             $data['batch_no'] = !empty($dataArr['batch_no']) ? $dataArr['batch_no'] : null;
             $data['created_by'] = $request->user()->id;
-            $data['total_amount'] = !empty($dataArr['total_amount']) ? $dataArr['total_amount'] : 0;
-            $data['isInvoice'] = $data['total_amount'] > 0 ? 1 : 0;
+            $data['amount'] = !empty($dataArr['amount']) ? $dataArr['amount'] : 0;
+            $totalAmount = $totalAmount + !empty($dataArr['amount']) ? (int)$dataArr['amount'] * (int)$btl : 0;
+            $data['isInvoice'] = $data['amount'] > 0 ? 1 : 0;
 
             if (in_array($dataArr['invoiceNo'], $invoiceArray)) {
                 $purchaseCount[$dataArr['invoiceNo']]['count'] = $purchaseCount[$dataArr['invoiceNo']]['count'] + 1;
@@ -5239,7 +5241,7 @@ class Api extends Controller
             $purchaseData['total_item'] = $purchaseCount[$purchaseData['invoice_no']]['count'];
             $save2 = PurchaseList::create($purchaseData);
             
-            $purchases = Purchase::where('invoice_no', $purchaseData['invoice_no'])->update(['purchase_list_id' => $save2->id]);
+            $purchases = Purchase::where('invoice_no', $purchaseData['invoice_no'])->update(['purchase_list_id' => $save2->id, 'total_amount' => $totalAmount]);
         }
 
 
@@ -5279,7 +5281,7 @@ class Api extends Controller
         if(!empty($last_invoice_no)){
             $invoice = $last_invoice_no->invoice_no + 1;
             // check if this invoice is not assigned to any other
-            $check_auto_created_invoice = SalesMain::where('status','1')->where('is_deleted','0')->where('invoice_no',$invoice)->first();
+            $check_auto_created_invoice = SalesMain::whe3re('status','1')->where('is_deleted','0')->where('invoice_no',$invoice)->first();
 
             if(!empty($check_auto_created_invoice)){
                 $sales_main_data['invoice_no'] = rand(1111,9999);
@@ -5331,397 +5333,400 @@ class Api extends Controller
                             $MlSize3 = 0;
         
                             if ($isCocktail) {
-                                $qty = ($brand['serving_size'] * $dataAr['sale']) / $peg_size[0]['peg_size'];
-                                $data['sales_main_id'] = $SalesMain->id;
-                                $data['sale_price'] = ($qty * $stock->peg_selling_price);
-                                $MlSize = ($brand['serving_size'] * $dataAr['sale']);
-                                $data['qty'] = $MlSize;
-                                $data['sales_type'] = 1;
-                                $result = getBtlPegForRecipe($brand_id, $MlSize);
-                                $data['no_btl'] = $result['btl'];
-                                $data['no_peg'] = $result['peg'];
-                                $data['liquor_or_recipe'] = 'recipe';
-                                $data['recipe_id'] = $brand->recipe_id;
-                                $data['description'] = $brand->recipe_code . ' recipe sale';
-                                $Sales = Sales::create($data);
-
-                                $year = !empty($dataAr['date'] . ' +1 day') ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
-                                $month = !empty($dataAr['date'] . ' +1 day') ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
-                                $log_data_table_name = $year . '_' . $month . '_log_data';
-
-                                if (!Schema::hasTable($log_data_table_name)) {
-                                    Schema::create($log_data_table_name, function (Blueprint $table) {
-                                        // Primary Key
-                                        $table->id();
-
-                                        // Other Columns
-                                        $table->unsignedInteger('company_id')->nullable();
-                                        $table->date('log_date')->nullable();
-                                        $table->json('data')->nullable();
-                                        $table->enum('status', ['active', 'inactive'])->default('active');
-
-                                        // Timestamps
-                                        $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
-                                        $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
-                                    });
-                                }
-
-                                $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
-                                
-                                $sales_price = DB::table('stocks')->where('company_id', $request->company_id)->where('brand_id', $brand_id)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
-                                
-                                $logData = [];
-                                $logData['company_id'] = $request->company_id;
-
-                                // entry of this brand
-                                $data_for_log_data = [];
-                                $data_for_log_data['transaction_category'] = 'debit';
-                                $data_for_log_data['transaction_type'] = 'sales';
-                                $data_for_log_data['transaction_table_id'] = $Sales->id;
-                                $data_for_log_data['brand_id'] = (int)$brand_id;
-                                $data_for_log_data['brand_name'] = $peg_size[0]['name'];
-                                $data_for_log_data['category_id'] = $category_details->id;
-                                $data_for_log_data['category_name'] = $category_details->name;
-                                $data_for_log_data['category_short_name'] = $category_details->short_name;
-                                $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
-                                $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
-                                $data_for_log_data['qty'] = $MlSize;
-                                $data_for_log_data['purchase_price'] = NULL;
-                                $data_for_log_data['vendor_id'] = NULL;
-                                $data_for_log_data['vendor_name'] = NULL;
-                                $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
-                                $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
-                                $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
-
-                                // Check if an entry already exists for the given company and invoice date
-                                $sales_date_entry_found = DB::table($log_data_table_name)
-                                    ->where('company_id', $request->company_id)
-                                    ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
-                                    ->where('status', 'active')
-                                    ->first();
-
-                                if (!empty($sales_date_entry_found)) {
-                                    // Existing entry found: Decode and ensure it's an array
-                                    $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
-                                    
-                                    // Check if the existing data is an array; if not, convert it to an array
-                                    if (!is_array($existing_data)) {
-                                        $existing_data = [$existing_data];
-                                    }
-
-                                    // Append new data
-                                    $existing_data[] = $data_for_log_data;
-
-                                    // Re-encode the updated data back to JSON
-                                    $logData['data'] = json_encode($existing_data);
-
-                                    // Update the existing entry with the new data
-                                    DB::table($log_data_table_name)
-                                        ->where('id', $sales_date_entry_found->id)
-                                        ->update([
-                                            'data' => $logData['data'],
-                                            'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
-                                        ]);
-                                } else {
-                                    // No existing entry found: Insert new data
-                                    $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                    $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
-
-                                    DB::table($log_data_table_name)->insert($logData);
-                                }
-        
-                                if (!empty($Sales)) {
+                                if($dataAr['sale'] > 0)
+                                {
+                                    $qty = ($brand['serving_size'] * $dataAr['sale']) / $peg_size[0]['peg_size'];
+                                    $data['sales_main_id'] = $SalesMain->id;
+                                    $data['sale_price'] = ($qty * $stock->peg_selling_price);
+                                    $MlSize = ($brand['serving_size'] * $dataAr['sale']);
+                                    $data['qty'] = $MlSize;
+                                    $data['sales_type'] = 1;
+                                    $result = getBtlPegForRecipe($brand_id, $MlSize);
+                                    $data['no_btl'] = $result['btl'];
+                                    $data['no_peg'] = $result['peg'];
+                                    $data['liquor_or_recipe'] = 'recipe';
+                                    $data['recipe_id'] = $brand->recipe_id;
+                                    $data['description'] = $brand->recipe_code . ' recipe sale';
+                                    $Sales = Sales::create($data);
                                     $success = true;
-                                    if ($dataAr['nc'] > 0) {
-                                        $data['sales_main_id'] = $SalesMain->id;
-                                        $data['sale'] = $dataAr['nc'];
-                                        $qty = ($brand['serving_size'] * $data['sale']) / $peg_size[0]['peg_size'];
-                                        $data['sale_price'] = ($qty * $stock->peg_selling_price);
-                                        $MlSize1 = ($brand['serving_size'] * $data['sale']);
-                                        $data['qty'] = $MlSize1;
-                                        $data['sales_type'] = 2;
-                                        $result = getBtlPegForRecipe($brand_id, $MlSize1);
-                                        $data['no_btl'] = $result['btl'];
-                                        $data['no_peg'] = $result['peg'];
-                                        $data['liquor_or_recipe'] = 'recipe';
-                                        $data['recipe_id'] = $brand->recipe_id;
-                                        $data['description'] = $brand->recipe_code . ' recipe sale';
-                                        $Sales = Sales::create($data);
-
-                                        if (!Schema::hasTable($log_data_table_name)) {
-                                            Schema::create($log_data_table_name, function (Blueprint $table) {
-                                                // Primary Key
-                                                $table->id();
-        
-                                                // Other Columns
-                                                $table->unsignedInteger('company_id')->nullable();
-                                                $table->date('log_date')->nullable();
-                                                $table->json('data')->nullable();
-                                                $table->enum('status', ['active', 'inactive'])->default('active');
-        
-                                                // Timestamps
-                                                $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
-                                                $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
-                                            });
-                                        }
-        
-                                        $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
-                                        
-                                        $sales_price = DB::table('stocks')->where('company_id', $request->company_id)->where('brand_id', $brand_id)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
-                                        
-                                        $logData = [];
-                                        $logData['company_id'] = $request->company_id;
-        
-                                        // entry of this brand
-                                        $data_for_log_data = [];
-                                        $data_for_log_data['transaction_category'] = 'debit';
-                                        $data_for_log_data['transaction_type'] = 'sales';
-                                        $data_for_log_data['transaction_table_id'] = $Sales->id;
-                                        $data_for_log_data['brand_id'] = (int)$brand_id;
-                                        $data_for_log_data['brand_name'] = $peg_size[0]['name'];
-                                        $data_for_log_data['category_id'] = $category_details->id;
-                                        $data_for_log_data['category_name'] = $category_details->name;
-                                        $data_for_log_data['category_short_name'] = $category_details->short_name;
-                                        $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
-                                        $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
-                                        $data_for_log_data['qty'] = $MlSize;
-                                        $data_for_log_data['purchase_price'] = NULL;
-                                        $data_for_log_data['vendor_id'] = NULL;
-                                        $data_for_log_data['vendor_name'] = NULL;
-                                        $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
-                                        $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
-                                        $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
-        
-                                        // Check if an entry already exists for the given company and invoice date
-                                        $sales_date_entry_found = DB::table($log_data_table_name)
-                                            ->where('company_id', $request->company_id)
-                                            ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
-                                            ->where('status', 'active')
-                                            ->first();
-        
-                                        if (!empty($sales_date_entry_found)) {
-                                            // Existing entry found: Decode and ensure it's an array
-                                            $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
-                                            
-                                            // Check if the existing data is an array; if not, convert it to an array
-                                            if (!is_array($existing_data)) {
-                                                $existing_data = [$existing_data];
-                                            }
-        
-                                            // Append new data
-                                            $existing_data[] = $data_for_log_data;
-        
-                                            // Re-encode the updated data back to JSON
-                                            $logData['data'] = json_encode($existing_data);
-        
-                                            // Update the existing entry with the new data
-                                            DB::table($log_data_table_name)
-                                                ->where('id', $sales_date_entry_found->id)
-                                                ->update([
-                                                    'data' => $logData['data'],
-                                                    'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
-                                                ]);
-                                        } else {
-                                            // No existing entry found: Insert new data
-                                            $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                            $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
-        
-                                            DB::table($log_data_table_name)->insert($logData);
-                                        }
+    
+                                    $year = !empty($dataAr['date'] . ' +1 day') ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
+                                    $month = !empty($dataAr['date'] . ' +1 day') ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
+                                    $log_data_table_name = $year . '_' . $month . '_log_data';
+    
+                                    if (!Schema::hasTable($log_data_table_name)) {
+                                        Schema::create($log_data_table_name, function (Blueprint $table) {
+                                            // Primary Key
+                                            $table->id();
+    
+                                            // Other Columns
+                                            $table->unsignedInteger('company_id')->nullable();
+                                            $table->date('log_date')->nullable();
+                                            $table->json('data')->nullable();
+                                            $table->enum('status', ['active', 'inactive'])->default('active');
+    
+                                            // Timestamps
+                                            $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
+                                            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+                                        });
                                     }
-                                    if ($dataAr['banquet'] > 0) {
-                                        $data['sales_main_id'] = $SalesMain->id;
-                                        $data['sale'] = $dataAr['banquet'];
-                                        $qty = ($brand['serving_size'] * $data['sale']) / $peg_size[0]['peg_size'];
-                                        $data['sale_price'] = ($qty * $stock->peg_selling_price);
-                                        $MlSize2 = ($brand['serving_size'] * $data['sale']);
-                                        $data['qty'] = $MlSize2;
-                                        $data['sales_type'] = 3;
-                                        $result = getBtlPegForRecipe($brand_id, $MlSize2);
-                                        $data['no_btl'] = $result['btl'];
-                                        $data['no_peg'] = $result['peg'];
-                                        $data['liquor_or_recipe'] = 'recipe';
-                                        $data['recipe_id'] = $brand->recipe_id;
-                                        $data['description'] = $brand->recipe_code . ' recipe sale';
-                                        $Sales = Sales::create($data);
-
-                                        if (!Schema::hasTable($log_data_table_name)) {
-                                            Schema::create($log_data_table_name, function (Blueprint $table) {
-                                                // Primary Key
-                                                $table->id();
-        
-                                                // Other Columns
-                                                $table->unsignedInteger('company_id')->nullable();
-                                                $table->date('log_date')->nullable();
-                                                $table->json('data')->nullable();
-                                                $table->enum('status', ['active', 'inactive'])->default('active');
-        
-                                                // Timestamps
-                                                $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
-                                                $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
-                                            });
-                                        }
-        
-                                        $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+    
+                                    $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+                                    
+                                    $sales_price = DB::table('stocks')->where('company_id', $request->company_id)->where('brand_id', $brand_id)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $request->company_id;
+    
+                                    // entry of this brand
+                                    $data_for_log_data = [];
+                                    $data_for_log_data['transaction_category'] = 'debit';
+                                    $data_for_log_data['transaction_type'] = 'sales';
+                                    $data_for_log_data['transaction_table_id'] = $Sales->id;
+                                    $data_for_log_data['brand_id'] = (int)$brand_id;
+                                    $data_for_log_data['brand_name'] = $peg_size[0]['name'];
+                                    $data_for_log_data['category_id'] = $category_details->id;
+                                    $data_for_log_data['category_name'] = $category_details->name;
+                                    $data_for_log_data['category_short_name'] = $category_details->short_name;
+                                    $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
+                                    $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
+                                    $data_for_log_data['qty'] = $MlSize;
+                                    $data_for_log_data['purchase_price'] = NULL;
+                                    $data_for_log_data['vendor_id'] = NULL;
+                                    $data_for_log_data['vendor_name'] = NULL;
+                                    $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
+                                    $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
+                                    $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
+    
+                                    // Check if an entry already exists for the given company and invoice date
+                                    $sales_date_entry_found = DB::table($log_data_table_name)
+                                        ->where('company_id', $request->company_id)
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
+                                        ->where('status', 'active')
+                                        ->first();
+    
+                                    if (!empty($sales_date_entry_found)) {
+                                        // Existing entry found: Decode and ensure it's an array
+                                        $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
                                         
-                                        $sales_price = DB::table('stocks')->where('company_id', $request->company_id)->where('brand_id', $brand_id)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
-                                        
-                                        $logData = [];
-                                        $logData['company_id'] = $request->company_id;
-        
-                                        // entry of this brand
-                                        $data_for_log_data = [];
-                                        $data_for_log_data['transaction_category'] = 'debit';
-                                        $data_for_log_data['transaction_type'] = 'sales';
-                                        $data_for_log_data['transaction_table_id'] = $Sales->id;
-                                        $data_for_log_data['brand_id'] = (int)$brand_id;
-                                        $data_for_log_data['brand_name'] = $peg_size[0]['name'];
-                                        $data_for_log_data['category_id'] = $category_details->id;
-                                        $data_for_log_data['category_name'] = $category_details->name;
-                                        $data_for_log_data['category_short_name'] = $category_details->short_name;
-                                        $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
-                                        $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
-                                        $data_for_log_data['qty'] = $MlSize;
-                                        $data_for_log_data['purchase_price'] = NULL;
-                                        $data_for_log_data['vendor_id'] = NULL;
-                                        $data_for_log_data['vendor_name'] = NULL;
-                                        $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
-                                        $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
-                                        $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
-        
-                                        // Check if an entry already exists for the given company and invoice date
-                                        $sales_date_entry_found = DB::table($log_data_table_name)
-                                            ->where('company_id', $request->company_id)
-                                            ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
-                                            ->where('status', 'active')
-                                            ->first();
-        
-                                        if (!empty($sales_date_entry_found)) {
-                                            // Existing entry found: Decode and ensure it's an array
-                                            $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
-                                            
-                                            // Check if the existing data is an array; if not, convert it to an array
-                                            if (!is_array($existing_data)) {
-                                                $existing_data = [$existing_data];
-                                            }
-        
-                                            // Append new data
-                                            $existing_data[] = $data_for_log_data;
-        
-                                            // Re-encode the updated data back to JSON
-                                            $logData['data'] = json_encode($existing_data);
-        
-                                            // Update the existing entry with the new data
-                                            DB::table($log_data_table_name)
-                                                ->where('id', $sales_date_entry_found->id)
-                                                ->update([
-                                                    'data' => $logData['data'],
-                                                    'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
-                                                ]);
-                                        } else {
-                                            // No existing entry found: Insert new data
-                                            $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                            $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
-        
-                                            DB::table($log_data_table_name)->insert($logData);
+                                        // Check if the existing data is an array; if not, convert it to an array
+                                        if (!is_array($existing_data)) {
+                                            $existing_data = [$existing_data];
                                         }
+    
+                                        // Append new data
+                                        $existing_data[] = $data_for_log_data;
+    
+                                        // Re-encode the updated data back to JSON
+                                        $logData['data'] = json_encode($existing_data);
+    
+                                        // Update the existing entry with the new data
+                                        DB::table($log_data_table_name)
+                                            ->where('id', $sales_date_entry_found->id)
+                                            ->update([
+                                                'data' => $logData['data'],
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
+                                            ]);
+                                    } else {
+                                        // No existing entry found: Insert new data
+                                        $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
+    
+                                        DB::table($log_data_table_name)->insert($logData);
                                     }
-                                    if ($dataAr['cocktail'] > 0) {
-                                        $data['sales_main_id'] = $SalesMain->id;
-                                        $data['sale'] = $dataAr['cocktail'];
-                                        $qty = ($brand['serving_size'] * $data['sale']) / $peg_size[0]['peg_size'];
-                                        $data['sale_price'] = ($qty * $stock->peg_selling_price);
-                                        $MlSize2 = ($brand['serving_size'] * $data['sale']);
-                                        $data['qty'] = $MlSize2;
-                                        $data['sales_type'] = 4;
-                                        $result = getBtlPegForRecipe($brand_id, $MlSize2);
-                                        $data['no_btl'] = $result['btl'];
-                                        $data['no_peg'] = $result['peg'];
-                                        $data['liquor_or_recipe'] = 'recipe';
-                                        $data['recipe_id'] = $brand->recipe_id;
-                                        $data['description'] = $brand->recipe_code . ' recipe sale';
-                                        $Sales = Sales::create($data);
+                                }
+                                if ($dataAr['nc'] > 0) {
+                                    $data['sales_main_id'] = $SalesMain->id;
+                                    $data['sale'] = $dataAr['nc'];
+                                    $qty = ($brand['serving_size'] * $data['sale']) / $peg_size[0]['peg_size'];
+                                    $data['sale_price'] = ($qty * $stock->peg_selling_price);
+                                    $MlSize1 = ($brand['serving_size'] * $data['sale']);
+                                    $data['qty'] = $MlSize1;
+                                    $data['sales_type'] = 2;
+                                    $result = getBtlPegForRecipe($brand_id, $MlSize1);
+                                    $data['no_btl'] = $result['btl'];
+                                    $data['no_peg'] = $result['peg'];
+                                    $data['liquor_or_recipe'] = 'recipe';
+                                    $data['recipe_id'] = $brand->recipe_id;
+                                    $data['description'] = $brand->recipe_code . ' recipe sale';
+                                    $Sales = Sales::create($data);
+                                    $success = true;
 
-                                        if (!Schema::hasTable($log_data_table_name)) {
-                                            Schema::create($log_data_table_name, function (Blueprint $table) {
-                                                // Primary Key
-                                                $table->id();
-        
-                                                // Other Columns
-                                                $table->unsignedInteger('company_id')->nullable();
-                                                $table->date('log_date')->nullable();
-                                                $table->json('data')->nullable();
-                                                $table->enum('status', ['active', 'inactive'])->default('active');
-        
-                                                // Timestamps
-                                                $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
-                                                $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
-                                            });
-                                        }
-        
-                                        $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+                                    if (!Schema::hasTable($log_data_table_name)) {
+                                        Schema::create($log_data_table_name, function (Blueprint $table) {
+                                            // Primary Key
+                                            $table->id();
+    
+                                            // Other Columns
+                                            $table->unsignedInteger('company_id')->nullable();
+                                            $table->date('log_date')->nullable();
+                                            $table->json('data')->nullable();
+                                            $table->enum('status', ['active', 'inactive'])->default('active');
+    
+                                            // Timestamps
+                                            $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
+                                            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+                                        });
+                                    }
+    
+                                    $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+                                    
+                                    $sales_price = DB::table('stocks')->where('company_id', $request->company_id)->where('brand_id', $brand_id)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $request->company_id;
+    
+                                    // entry of this brand
+                                    $data_for_log_data = [];
+                                    $data_for_log_data['transaction_category'] = 'debit';
+                                    $data_for_log_data['transaction_type'] = 'sales';
+                                    $data_for_log_data['transaction_table_id'] = $Sales->id;
+                                    $data_for_log_data['brand_id'] = (int)$brand_id;
+                                    $data_for_log_data['brand_name'] = $peg_size[0]['name'];
+                                    $data_for_log_data['category_id'] = $category_details->id;
+                                    $data_for_log_data['category_name'] = $category_details->name;
+                                    $data_for_log_data['category_short_name'] = $category_details->short_name;
+                                    $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
+                                    $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
+                                    $data_for_log_data['qty'] = $MlSize;
+                                    $data_for_log_data['purchase_price'] = NULL;
+                                    $data_for_log_data['vendor_id'] = NULL;
+                                    $data_for_log_data['vendor_name'] = NULL;
+                                    $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
+                                    $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
+                                    $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
+    
+                                    // Check if an entry already exists for the given company and invoice date
+                                    $sales_date_entry_found = DB::table($log_data_table_name)
+                                        ->where('company_id', $request->company_id)
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
+                                        ->where('status', 'active')
+                                        ->first();
+    
+                                    if (!empty($sales_date_entry_found)) {
+                                        // Existing entry found: Decode and ensure it's an array
+                                        $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
                                         
-                                        $sales_price = DB::table('stocks')->where('company_id', $request->company_id)->where('brand_id', $brand_id)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
-                                        
-                                        $logData = [];
-                                        $logData['company_id'] = $request->company_id;
-        
-                                        // entry of this brand
-                                        $data_for_log_data = [];
-                                        $data_for_log_data['transaction_category'] = 'debit';
-                                        $data_for_log_data['transaction_type'] = 'sales';
-                                        $data_for_log_data['transaction_table_id'] = $Sales->id;
-                                        $data_for_log_data['brand_id'] = (int)$brand_id;
-                                        $data_for_log_data['brand_name'] = $peg_size[0]['name'];
-                                        $data_for_log_data['category_id'] = $category_details->id;
-                                        $data_for_log_data['category_name'] = $category_details->name;
-                                        $data_for_log_data['category_short_name'] = $category_details->short_name;
-                                        $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
-                                        $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
-                                        $data_for_log_data['qty'] = $MlSize;
-                                        $data_for_log_data['purchase_price'] = NULL;
-                                        $data_for_log_data['vendor_id'] = NULL;
-                                        $data_for_log_data['vendor_name'] = NULL;
-                                        $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
-                                        $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
-                                        $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
-        
-                                        // Check if an entry already exists for the given company and invoice date
-                                        $sales_date_entry_found = DB::table($log_data_table_name)
-                                            ->where('company_id', $request->company_id)
-                                            ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
-                                            ->where('status', 'active')
-                                            ->first();
-        
-                                        if (!empty($sales_date_entry_found)) {
-                                            // Existing entry found: Decode and ensure it's an array
-                                            $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
-                                            
-                                            // Check if the existing data is an array; if not, convert it to an array
-                                            if (!is_array($existing_data)) {
-                                                $existing_data = [$existing_data];
-                                            }
-        
-                                            // Append new data
-                                            $existing_data[] = $data_for_log_data;
-        
-                                            // Re-encode the updated data back to JSON
-                                            $logData['data'] = json_encode($existing_data);
-        
-                                            // Update the existing entry with the new data
-                                            DB::table($log_data_table_name)
-                                                ->where('id', $sales_date_entry_found->id)
-                                                ->update([
-                                                    'data' => $logData['data'],
-                                                    'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
-                                                ]);
-                                        } else {
-                                            // No existing entry found: Insert new data
-                                            $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                            $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
-        
-                                            DB::table($log_data_table_name)->insert($logData);
+                                        // Check if the existing data is an array; if not, convert it to an array
+                                        if (!is_array($existing_data)) {
+                                            $existing_data = [$existing_data];
                                         }
+    
+                                        // Append new data
+                                        $existing_data[] = $data_for_log_data;
+    
+                                        // Re-encode the updated data back to JSON
+                                        $logData['data'] = json_encode($existing_data);
+    
+                                        // Update the existing entry with the new data
+                                        DB::table($log_data_table_name)
+                                            ->where('id', $sales_date_entry_found->id)
+                                            ->update([
+                                                'data' => $logData['data'],
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
+                                            ]);
+                                    } else {
+                                        // No existing entry found: Insert new data
+                                        $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
+    
+                                        DB::table($log_data_table_name)->insert($logData);
+                                    }
+                                }
+                                if ($dataAr['banquet'] > 0) {
+                                    $data['sales_main_id'] = $SalesMain->id;
+                                    $data['sale'] = $dataAr['banquet'];
+                                    $qty = ($brand['serving_size'] * $data['sale']) / $peg_size[0]['peg_size'];
+                                    $data['sale_price'] = ($qty * $stock->peg_selling_price);
+                                    $MlSize2 = ($brand['serving_size'] * $data['sale']);
+                                    $data['qty'] = $MlSize2;
+                                    $data['sales_type'] = 3;
+                                    $result = getBtlPegForRecipe($brand_id, $MlSize2);
+                                    $data['no_btl'] = $result['btl'];
+                                    $data['no_peg'] = $result['peg'];
+                                    $data['liquor_or_recipe'] = 'recipe';
+                                    $data['recipe_id'] = $brand->recipe_id;
+                                    $data['description'] = $brand->recipe_code . ' recipe sale';
+                                    $Sales = Sales::create($data);
+                                    $success = true;
+
+                                    if (!Schema::hasTable($log_data_table_name)) {
+                                        Schema::create($log_data_table_name, function (Blueprint $table) {
+                                            // Primary Key
+                                            $table->id();
+    
+                                            // Other Columns
+                                            $table->unsignedInteger('company_id')->nullable();
+                                            $table->date('log_date')->nullable();
+                                            $table->json('data')->nullable();
+                                            $table->enum('status', ['active', 'inactive'])->default('active');
+    
+                                            // Timestamps
+                                            $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
+                                            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+                                        });
+                                    }
+    
+                                    $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+                                    
+                                    $sales_price = DB::table('stocks')->where('company_id', $request->company_id)->where('brand_id', $brand_id)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $request->company_id;
+    
+                                    // entry of this brand
+                                    $data_for_log_data = [];
+                                    $data_for_log_data['transaction_category'] = 'debit';
+                                    $data_for_log_data['transaction_type'] = 'sales';
+                                    $data_for_log_data['transaction_table_id'] = $Sales->id;
+                                    $data_for_log_data['brand_id'] = (int)$brand_id;
+                                    $data_for_log_data['brand_name'] = $peg_size[0]['name'];
+                                    $data_for_log_data['category_id'] = $category_details->id;
+                                    $data_for_log_data['category_name'] = $category_details->name;
+                                    $data_for_log_data['category_short_name'] = $category_details->short_name;
+                                    $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
+                                    $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
+                                    $data_for_log_data['qty'] = $MlSize;
+                                    $data_for_log_data['purchase_price'] = NULL;
+                                    $data_for_log_data['vendor_id'] = NULL;
+                                    $data_for_log_data['vendor_name'] = NULL;
+                                    $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
+                                    $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
+                                    $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
+    
+                                    // Check if an entry already exists for the given company and invoice date
+                                    $sales_date_entry_found = DB::table($log_data_table_name)
+                                        ->where('company_id', $request->company_id)
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
+                                        ->where('status', 'active')
+                                        ->first();
+    
+                                    if (!empty($sales_date_entry_found)) {
+                                        // Existing entry found: Decode and ensure it's an array
+                                        $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
+                                        
+                                        // Check if the existing data is an array; if not, convert it to an array
+                                        if (!is_array($existing_data)) {
+                                            $existing_data = [$existing_data];
+                                        }
+    
+                                        // Append new data
+                                        $existing_data[] = $data_for_log_data;
+    
+                                        // Re-encode the updated data back to JSON
+                                        $logData['data'] = json_encode($existing_data);
+    
+                                        // Update the existing entry with the new data
+                                        DB::table($log_data_table_name)
+                                            ->where('id', $sales_date_entry_found->id)
+                                            ->update([
+                                                'data' => $logData['data'],
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
+                                            ]);
+                                    } else {
+                                        // No existing entry found: Insert new data
+                                        $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
+    
+                                        DB::table($log_data_table_name)->insert($logData);
+                                    }
+                                }
+                                if ($dataAr['cocktail'] > 0) {
+                                    $data['sales_main_id'] = $SalesMain->id;
+                                    $data['sale'] = $dataAr['cocktail'];
+                                    $qty = ($brand['serving_size'] * $data['sale']) / $peg_size[0]['peg_size'];
+                                    $data['sale_price'] = ($qty * $stock->peg_selling_price);
+                                    $MlSize2 = ($brand['serving_size'] * $data['sale']);
+                                    $data['qty'] = $MlSize2;
+                                    $data['sales_type'] = 4;
+                                    $result = getBtlPegForRecipe($brand_id, $MlSize2);
+                                    $data['no_btl'] = $result['btl'];
+                                    $data['no_peg'] = $result['peg'];
+                                    $data['liquor_or_recipe'] = 'recipe';
+                                    $data['recipe_id'] = $brand->recipe_id;
+                                    $data['description'] = $brand->recipe_code . ' recipe sale';
+                                    $Sales = Sales::create($data);
+                                    $success = true;
+
+                                    if (!Schema::hasTable($log_data_table_name)) {
+                                        Schema::create($log_data_table_name, function (Blueprint $table) {
+                                            // Primary Key
+                                            $table->id();
+    
+                                            // Other Columns
+                                            $table->unsignedInteger('company_id')->nullable();
+                                            $table->date('log_date')->nullable();
+                                            $table->json('data')->nullable();
+                                            $table->enum('status', ['active', 'inactive'])->default('active');
+    
+                                            // Timestamps
+                                            $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
+                                            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+                                        });
+                                    }
+    
+                                    $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+                                    
+                                    $sales_price = DB::table('stocks')->where('company_id', $request->company_id)->where('brand_id', $brand_id)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $request->company_id;
+    
+                                    // entry of this brand
+                                    $data_for_log_data = [];
+                                    $data_for_log_data['transaction_category'] = 'debit';
+                                    $data_for_log_data['transaction_type'] = 'sales';
+                                    $data_for_log_data['transaction_table_id'] = $Sales->id;
+                                    $data_for_log_data['brand_id'] = (int)$brand_id;
+                                    $data_for_log_data['brand_name'] = $peg_size[0]['name'];
+                                    $data_for_log_data['category_id'] = $category_details->id;
+                                    $data_for_log_data['category_name'] = $category_details->name;
+                                    $data_for_log_data['category_short_name'] = $category_details->short_name;
+                                    $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
+                                    $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
+                                    $data_for_log_data['qty'] = $MlSize;
+                                    $data_for_log_data['purchase_price'] = NULL;
+                                    $data_for_log_data['vendor_id'] = NULL;
+                                    $data_for_log_data['vendor_name'] = NULL;
+                                    $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
+                                    $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
+                                    $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
+    
+                                    // Check if an entry already exists for the given company and invoice date
+                                    $sales_date_entry_found = DB::table($log_data_table_name)
+                                        ->where('company_id', $request->company_id)
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
+                                        ->where('status', 'active')
+                                        ->first();
+    
+                                    if (!empty($sales_date_entry_found)) {
+                                        // Existing entry found: Decode and ensure it's an array
+                                        $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
+                                        
+                                        // Check if the existing data is an array; if not, convert it to an array
+                                        if (!is_array($existing_data)) {
+                                            $existing_data = [$existing_data];
+                                        }
+    
+                                        // Append new data
+                                        $existing_data[] = $data_for_log_data;
+    
+                                        // Re-encode the updated data back to JSON
+                                        $logData['data'] = json_encode($existing_data);
+    
+                                        // Update the existing entry with the new data
+                                        DB::table($log_data_table_name)
+                                            ->where('id', $sales_date_entry_found->id)
+                                            ->update([
+                                                'data' => $logData['data'],
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
+                                            ]);
+                                    } else {
+                                        // No existing entry found: Insert new data
+                                        $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
+    
+                                        DB::table($log_data_table_name)->insert($logData);
                                     }
                                 }
                             } else {
@@ -5741,384 +5746,387 @@ class Api extends Controller
                                 $spoAr1 = !empty($spoAr[0]) ? $spoAr[0] : 0;
                                 $spoAr2 = !empty($spoAr[1]) ? $spoAr[1] : 0;
         
-                                $data['sale_price'] = ($saleAr1 * $stock->btl_selling_price) + ($saleAr2 * $stock->peg_selling_price);
-        
-                                $MlSize = ($peg_size[0]['btl_size'] * $saleAr1) + ($peg_size[0]['peg_size'] * $saleAr2);
-                                $data['qty'] = $MlSize;
-                                $data['sales_main_id'] = $SalesMain->id;
-                                $data['sales_type'] = 1;
-                                $success = true;
-                                $data['no_btl'] = $saleAr1;
-                                $data['no_peg'] = $saleAr2;
-                                $data['liquor_or_recipe'] = 'liquor';
-                                $data['description'] = 'liquor sale';
-                                $Sales = Sales::create($data);
-        
-
-                                $year = !empty($dataAr['date'] . ' +1 day') ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
-                                $month = !empty($dataAr['date'] . ' +1 day') ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
-                                $log_data_table_name = $year . '_' . $month . '_log_data';
-
-                                if (!Schema::hasTable($log_data_table_name)) {
-                                    Schema::create($log_data_table_name, function (Blueprint $table) {
-                                        // Primary Key
-                                        $table->id();
-
-                                        // Other Columns
-                                        $table->unsignedInteger('company_id')->nullable();
-                                        $table->date('log_date')->nullable();
-                                        $table->json('data')->nullable();
-                                        $table->enum('status', ['active', 'inactive'])->default('active');
-
-                                        // Timestamps
-                                        $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
-                                        $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
-                                    });
-                                }
-
-                                $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
-                                
-                                $sales_price = DB::table('stocks')->where('company_id', $data['company_id'])->where('brand_id', $brand)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
-                                
-                                $logData = [];
-                                $logData['company_id'] = $data['company_id'];
-
-                                // entry of this brand
-                                $data_for_log_data = [];
-                                $data_for_log_data['transaction_category'] = 'debit';
-                                $data_for_log_data['transaction_type'] = 'sales';
-                                $data_for_log_data['transaction_table_id'] = $Sales->id;
-                                $data_for_log_data['brand_id'] = (int)$peg_size[0]['id'];
-                                $data_for_log_data['brand_name'] = $peg_size[0]['name'];
-                                $data_for_log_data['category_id'] = $category_details->id;
-                                $data_for_log_data['category_name'] = $category_details->name;
-                                $data_for_log_data['category_short_name'] = $category_details->short_name;
-                                $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
-                                $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
-                                $data_for_log_data['qty'] = $MlSize;
-                                $data_for_log_data['purchase_price'] = NULL;
-                                $data_for_log_data['vendor_id'] = NULL;
-                                $data_for_log_data['vendor_name'] = NULL;
-                                $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
-                                $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
-                                $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
-
-                                // Check if an entry already exists for the given company and invoice date
-                                $sales_date_entry_found = DB::table($log_data_table_name)
-                                    ->where('company_id', $data['company_id'])
-                                    ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
-                                    ->where('status', 'active')
-                                    ->first();
-
-                                if (!empty($sales_date_entry_found)) {
-                                    // Existing entry found: Decode and ensure it's an array
-                                    $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
+                                if($dataAr['sale'] > 0)
+                                {
+                                    $data['sale_price'] = ($saleAr1 * $stock->btl_selling_price) + ($saleAr2 * $stock->peg_selling_price);
+            
+                                    $MlSize = ($peg_size[0]['btl_size'] * $saleAr1) + ($peg_size[0]['peg_size'] * $saleAr2);
+                                    $data['qty'] = $MlSize;
+                                    $data['sales_main_id'] = $SalesMain->id;
+                                    $data['sales_type'] = 1;
+                                    $success = true;
+                                    $data['no_btl'] = $saleAr1;
+                                    $data['no_peg'] = $saleAr2;
+                                    $data['liquor_or_recipe'] = 'liquor';
+                                    $data['description'] = 'liquor sale';
+                                    $Sales = Sales::create($data);
+    
+                                    $year = !empty($dataAr['date'] . ' +1 day') ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
+                                    $month = !empty($dataAr['date'] . ' +1 day') ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
+                                    $log_data_table_name = $year . '_' . $month . '_log_data';
+    
+                                    if (!Schema::hasTable($log_data_table_name)) {
+                                        Schema::create($log_data_table_name, function (Blueprint $table) {
+                                            // Primary Key
+                                            $table->id();
+    
+                                            // Other Columns
+                                            $table->unsignedInteger('company_id')->nullable();
+                                            $table->date('log_date')->nullable();
+                                            $table->json('data')->nullable();
+                                            $table->enum('status', ['active', 'inactive'])->default('active');
+    
+                                            // Timestamps
+                                            $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
+                                            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+                                        });
+                                    }
+    
+                                    $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
                                     
-                                    // Check if the existing data is an array; if not, convert it to an array
-                                    if (!is_array($existing_data)) {
-                                        $existing_data = [$existing_data];
+                                    $sales_price = DB::table('stocks')->where('company_id', $data['company_id'])->where('brand_id', $brand)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $data['company_id'];
+    
+                                    // entry of this brand
+                                    $data_for_log_data = [];
+                                    $data_for_log_data['transaction_category'] = 'debit';
+                                    $data_for_log_data['transaction_type'] = 'sales';
+                                    $data_for_log_data['transaction_table_id'] = $Sales->id;
+                                    $data_for_log_data['brand_id'] = (int)$peg_size[0]['id'];
+                                    $data_for_log_data['brand_name'] = $peg_size[0]['name'];
+                                    $data_for_log_data['category_id'] = $category_details->id;
+                                    $data_for_log_data['category_name'] = $category_details->name;
+                                    $data_for_log_data['category_short_name'] = $category_details->short_name;
+                                    $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
+                                    $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
+                                    $data_for_log_data['qty'] = $MlSize;
+                                    $data_for_log_data['purchase_price'] = NULL;
+                                    $data_for_log_data['vendor_id'] = NULL;
+                                    $data_for_log_data['vendor_name'] = NULL;
+                                    $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
+                                    $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
+                                    $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
+    
+                                    // Check if an entry already exists for the given company and invoice date
+                                    $sales_date_entry_found = DB::table($log_data_table_name)
+                                        ->where('company_id', $data['company_id'])
+                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
+                                        ->where('status', 'active')
+                                        ->first();
+    
+                                    if (!empty($sales_date_entry_found)) {
+                                        // Existing entry found: Decode and ensure it's an array
+                                        $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
+                                        
+                                        // Check if the existing data is an array; if not, convert it to an array
+                                        if (!is_array($existing_data)) {
+                                            $existing_data = [$existing_data];
+                                        }
+    
+                                        // Append new data
+                                        $existing_data[] = $data_for_log_data;
+    
+                                        // Re-encode the updated data back to JSON
+                                        $logData['data'] = json_encode($existing_data);
+    
+                                        // Update the existing entry with the new data
+                                        DB::table($log_data_table_name)
+                                            ->where('id', $sales_date_entry_found->id)
+                                            ->update([
+                                                'data' => $logData['data'],
+                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
+                                            ]);
+                                    } else {
+                                        // No existing entry found: Insert new data
+                                        $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+    
+                                        DB::table($log_data_table_name)->insert($logData);
                                     }
-
-                                    // Append new data
-                                    $existing_data[] = $data_for_log_data;
-
-                                    // Re-encode the updated data back to JSON
-                                    $logData['data'] = json_encode($existing_data);
-
-                                    // Update the existing entry with the new data
-                                    DB::table($log_data_table_name)
-                                        ->where('id', $sales_date_entry_found->id)
-                                        ->update([
-                                            'data' => $logData['data'],
-                                            'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
-                                        ]);
-                                } else {
-                                    // No existing entry found: Insert new data
-                                    $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                    $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
-
-                                    DB::table($log_data_table_name)->insert($logData);
                                 }
-                                if (!empty($Sales)) {
-                                    if ($dataAr['nc'] > 0) {
-                                        $data['sale_price'] = ($nc1 * $stock->btl_selling_price) + ($nc2 * $stock->peg_selling_price);
-                                        $MlSize1 = ($peg_size[0]['btl_size'] * $nc1) + ($peg_size[0]['peg_size'] * $nc2);
-                                        $data['qty'] = $MlSize1;
-                                        $data['sales_type'] = 2;
-                                        $data['no_btl'] = $nc1;
-                                        $data['no_peg'] = $nc2;
-                                        $data['sales_main_id'] = $SalesMain->id;
-                                        $data['liquor_or_recipe'] = 'liquor';
-                                        $data['description'] = 'liquor sale';
-                                        $Sales = Sales::create($data);
+                                if ($dataAr['nc'] > 0) {
+                                    $data['sale_price'] = ($nc1 * $stock->btl_selling_price) + ($nc2 * $stock->peg_selling_price);
+                                    $MlSize1 = ($peg_size[0]['btl_size'] * $nc1) + ($peg_size[0]['peg_size'] * $nc2);
+                                    $data['qty'] = $MlSize1;
+                                    $data['sales_type'] = 2;
+                                    $data['no_btl'] = $nc1;
+                                    $data['no_peg'] = $nc2;
+                                    $data['sales_main_id'] = $SalesMain->id;
+                                    $data['liquor_or_recipe'] = 'liquor';
+                                    $data['description'] = 'liquor sale';
+                                    $Sales = Sales::create($data);
+                                    $success = true;
 
-                                        if (!Schema::hasTable($log_data_table_name)) {
-                                            Schema::create($log_data_table_name, function (Blueprint $table) {
-                                                // Primary Key
-                                                $table->id();
-        
-                                                // Other Columns
-                                                $table->unsignedInteger('company_id')->nullable();
-                                                $table->date('log_date')->nullable();
-                                                $table->json('data')->nullable();
-                                                $table->enum('status', ['active', 'inactive'])->default('active');
-        
-                                                // Timestamps
-                                                $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
-                                                $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
-                                            });
-                                        }
-        
-                                        $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
-                                        
-                                        $sales_price = DB::table('stocks')->where('company_id', $data['company_id'])->where('brand_id', $brand)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
-                                        
-                                        $logData = [];
-                                        $logData['company_id'] = $data['company_id'];
-        
-                                        // entry of this brand
-                                        $data_for_log_data = [];
-                                        $data_for_log_data['transaction_category'] = 'debit';
-                                        $data_for_log_data['transaction_type'] = 'sales';
-                                        $data_for_log_data['transaction_table_id'] = $Sales->id;
-                                        $data_for_log_data['brand_id'] = (int)$peg_size[0]['id'];
-                                        $data_for_log_data['brand_name'] = $peg_size[0]['name'];
-                                        $data_for_log_data['category_id'] = $category_details->id;
-                                        $data_for_log_data['category_name'] = $category_details->name;
-                                        $data_for_log_data['category_short_name'] = $category_details->short_name;
-                                        $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
-                                        $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
-                                        $data_for_log_data['qty'] = $MlSize1;
-                                        $data_for_log_data['purchase_price'] = NULL;
-                                        $data_for_log_data['vendor_id'] = NULL;
-                                        $data_for_log_data['vendor_name'] = NULL;
-                                        $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
-                                        $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
-                                        $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
-        
-                                        // Check if an entry already exists for the given company and invoice date
-                                        $sales_date_entry_found = DB::table($log_data_table_name)
-                                            ->where('company_id', $data['company_id'])
-                                            ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
-                                            ->where('status', 'active')
-                                            ->first();
-        
-                                        if (!empty($sales_date_entry_found)) {
-                                            // Existing entry found: Decode and ensure it's an array
-                                            $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
-                                            
-                                            // Check if the existing data is an array; if not, convert it to an array
-                                            if (!is_array($existing_data)) {
-                                                $existing_data = [$existing_data];
-                                            }
-        
-                                            // Append new data
-                                            $existing_data[] = $data_for_log_data;
-        
-                                            // Re-encode the updated data back to JSON
-                                            $logData['data'] = json_encode($existing_data);
-        
-                                            // Update the existing entry with the new data
-                                            DB::table($log_data_table_name)
-                                                ->where('id', $sales_date_entry_found->id)
-                                                ->update([
-                                                    'data' => $logData['data'],
-                                                    'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
-                                                ]);
-                                        } else {
-                                            // No existing entry found: Insert new data
-                                            $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                            $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
-        
-                                            DB::table($log_data_table_name)->insert($logData);
-                                        }
+                                    if (!Schema::hasTable($log_data_table_name)) {
+                                        Schema::create($log_data_table_name, function (Blueprint $table) {
+                                            // Primary Key
+                                            $table->id();
+    
+                                            // Other Columns
+                                            $table->unsignedInteger('company_id')->nullable();
+                                            $table->date('log_date')->nullable();
+                                            $table->json('data')->nullable();
+                                            $table->enum('status', ['active', 'inactive'])->default('active');
+    
+                                            // Timestamps
+                                            $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
+                                            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+                                        });
                                     }
-                                    if ($dataAr['banquet'] > 0) {
-                                        $data['sale_price'] = ($banAr1 * $stock->btl_selling_price) + ($banAr2 * $stock->peg_selling_price);
-                                        $MlSize2 = ($peg_size[0]['btl_size'] * $banAr1) + ($peg_size[0]['peg_size'] * $banAr2);
-                                        $data['qty'] = $MlSize2;
-                                        $data['sales_type'] = 3;
-                                        $data['no_btl'] = $banAr1;
-                                        $data['no_peg'] = $banAr2;
-                                        $data['sales_main_id'] = $SalesMain->id;
-                                        $data['liquor_or_recipe'] = 'liquor';
-                                        $data['description'] = 'liquor sale';
-                                        $Sales = Sales::create($data);
-
-                                        if (!Schema::hasTable($log_data_table_name)) {
-                                            Schema::create($log_data_table_name, function (Blueprint $table) {
-                                                // Primary Key
-                                                $table->id();
-        
-                                                // Other Columns
-                                                $table->unsignedInteger('company_id')->nullable();
-                                                $table->date('log_date')->nullable();
-                                                $table->json('data')->nullable();
-                                                $table->enum('status', ['active', 'inactive'])->default('active');
-        
-                                                // Timestamps
-                                                $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
-                                                $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
-                                            });
-                                        }
-        
-                                        $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+    
+                                    $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+                                    
+                                    $sales_price = DB::table('stocks')->where('company_id', $data['company_id'])->where('brand_id', $brand)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $data['company_id'];
+    
+                                    // entry of this brand
+                                    $data_for_log_data = [];
+                                    $data_for_log_data['transaction_category'] = 'debit';
+                                    $data_for_log_data['transaction_type'] = 'sales';
+                                    $data_for_log_data['transaction_table_id'] = $Sales->id;
+                                    $data_for_log_data['brand_id'] = (int)$peg_size[0]['id'];
+                                    $data_for_log_data['brand_name'] = $peg_size[0]['name'];
+                                    $data_for_log_data['category_id'] = $category_details->id;
+                                    $data_for_log_data['category_name'] = $category_details->name;
+                                    $data_for_log_data['category_short_name'] = $category_details->short_name;
+                                    $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
+                                    $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
+                                    $data_for_log_data['qty'] = $MlSize1;
+                                    $data_for_log_data['purchase_price'] = NULL;
+                                    $data_for_log_data['vendor_id'] = NULL;
+                                    $data_for_log_data['vendor_name'] = NULL;
+                                    $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
+                                    $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
+                                    $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
+    
+                                    // Check if an entry already exists for the given company and invoice date
+                                    $sales_date_entry_found = DB::table($log_data_table_name)
+                                        ->where('company_id', $data['company_id'])
+                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
+                                        ->where('status', 'active')
+                                        ->first();
+    
+                                    if (!empty($sales_date_entry_found)) {
+                                        // Existing entry found: Decode and ensure it's an array
+                                        $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
                                         
-                                        $sales_price = DB::table('stocks')->where('company_id', $data['company_id'])->where('brand_id', $brand)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
-                                        
-                                        $logData = [];
-                                        $logData['company_id'] = $data['company_id'];
-        
-                                        // entry of this brand
-                                        $data_for_log_data = [];
-                                        $data_for_log_data['transaction_category'] = 'debit';
-                                        $data_for_log_data['transaction_type'] = 'sales';
-                                        $data_for_log_data['transaction_table_id'] = $Sales->id;
-                                        $data_for_log_data['brand_id'] = (int)$peg_size[0]['id'];
-                                        $data_for_log_data['brand_name'] = $peg_size[0]['name'];
-                                        $data_for_log_data['category_id'] = $category_details->id;
-                                        $data_for_log_data['category_name'] = $category_details->name;
-                                        $data_for_log_data['category_short_name'] = $category_details->short_name;
-                                        $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
-                                        $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
-                                        $data_for_log_data['qty'] = $MlSize2;
-                                        $data_for_log_data['purchase_price'] = NULL;
-                                        $data_for_log_data['vendor_id'] = NULL;
-                                        $data_for_log_data['vendor_name'] = NULL;
-                                        $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
-                                        $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
-                                        $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
-        
-                                        // Check if an entry already exists for the given company and invoice date
-                                        $sales_date_entry_found = DB::table($log_data_table_name)
-                                            ->where('company_id', $data['company_id'])
-                                            ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
-                                            ->where('status', 'active')
-                                            ->first();
-        
-                                        if (!empty($sales_date_entry_found)) {
-                                            // Existing entry found: Decode and ensure it's an array
-                                            $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
-                                            
-                                            // Check if the existing data is an array; if not, convert it to an array
-                                            if (!is_array($existing_data)) {
-                                                $existing_data = [$existing_data];
-                                            }
-        
-                                            // Append new data
-                                            $existing_data[] = $data_for_log_data;
-        
-                                            // Re-encode the updated data back to JSON
-                                            $logData['data'] = json_encode($existing_data);
-        
-                                            // Update the existing entry with the new data
-                                            DB::table($log_data_table_name)
-                                                ->where('id', $sales_date_entry_found->id)
-                                                ->update([
-                                                    'data' => $logData['data'],
-                                                    'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
-                                                ]);
-                                        } else {
-                                            // No existing entry found: Insert new data
-                                            $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                            $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
-        
-                                            DB::table($log_data_table_name)->insert($logData);
+                                        // Check if the existing data is an array; if not, convert it to an array
+                                        if (!is_array($existing_data)) {
+                                            $existing_data = [$existing_data];
                                         }
-
+    
+                                        // Append new data
+                                        $existing_data[] = $data_for_log_data;
+    
+                                        // Re-encode the updated data back to JSON
+                                        $logData['data'] = json_encode($existing_data);
+    
+                                        // Update the existing entry with the new data
+                                        DB::table($log_data_table_name)
+                                            ->where('id', $sales_date_entry_found->id)
+                                            ->update([
+                                                'data' => $logData['data'],
+                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
+                                            ]);
+                                    } else {
+                                        // No existing entry found: Insert new data
+                                        $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+    
+                                        DB::table($log_data_table_name)->insert($logData);
                                     }
-                                    if ($dataAr['cocktail'] > 0) {
-                                        $data['sale_price'] = ($spoAr1 * $stock->btl_selling_price) + ($spoAr2 * $stock->peg_selling_price);
-                                        $MlSize2 = ($peg_size[0]['btl_size'] * $spoAr1) + ($peg_size[0]['peg_size'] * $spoAr2);
-                                        $data['qty'] = $MlSize3;
-                                        $data['sales_type'] = 4;
-                                        $data['no_btl'] = $spoAr1;
-                                        $data['no_peg'] = $spoAr2;
-                                        $data['sales_main_id'] = $SalesMain->id;
-                                        $data['liquor_or_recipe'] = 'liquor';
-                                        $data['description'] = 'liquor sale';
-                                        $Sales = Sales::create($data);
+                                }
+                                if ($dataAr['banquet'] > 0) {
+                                    $data['sale_price'] = ($banAr1 * $stock->btl_selling_price) + ($banAr2 * $stock->peg_selling_price);
+                                    $MlSize2 = ($peg_size[0]['btl_size'] * $banAr1) + ($peg_size[0]['peg_size'] * $banAr2);
+                                    $data['qty'] = $MlSize2;
+                                    $data['sales_type'] = 3;
+                                    $data['no_btl'] = $banAr1;
+                                    $data['no_peg'] = $banAr2;
+                                    $data['sales_main_id'] = $SalesMain->id;
+                                    $data['liquor_or_recipe'] = 'liquor';
+                                    $data['description'] = 'liquor sale';
+                                    $Sales = Sales::create($data);
+                                    $success = true;
 
-                                        if (!Schema::hasTable($log_data_table_name)) {
-                                            Schema::create($log_data_table_name, function (Blueprint $table) {
-                                                // Primary Key
-                                                $table->id();
-        
-                                                // Other Columns
-                                                $table->unsignedInteger('company_id')->nullable();
-                                                $table->date('log_date')->nullable();
-                                                $table->json('data')->nullable();
-                                                $table->enum('status', ['active', 'inactive'])->default('active');
-        
-                                                // Timestamps
-                                                $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
-                                                $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
-                                            });
-                                        }
-        
-                                        $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+                                    if (!Schema::hasTable($log_data_table_name)) {
+                                        Schema::create($log_data_table_name, function (Blueprint $table) {
+                                            // Primary Key
+                                            $table->id();
+    
+                                            // Other Columns
+                                            $table->unsignedInteger('company_id')->nullable();
+                                            $table->date('log_date')->nullable();
+                                            $table->json('data')->nullable();
+                                            $table->enum('status', ['active', 'inactive'])->default('active');
+    
+                                            // Timestamps
+                                            $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
+                                            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+                                        });
+                                    }
+    
+                                    $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+                                    
+                                    $sales_price = DB::table('stocks')->where('company_id', $data['company_id'])->where('brand_id', $brand)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $data['company_id'];
+    
+                                    // entry of this brand
+                                    $data_for_log_data = [];
+                                    $data_for_log_data['transaction_category'] = 'debit';
+                                    $data_for_log_data['transaction_type'] = 'sales';
+                                    $data_for_log_data['transaction_table_id'] = $Sales->id;
+                                    $data_for_log_data['brand_id'] = (int)$peg_size[0]['id'];
+                                    $data_for_log_data['brand_name'] = $peg_size[0]['name'];
+                                    $data_for_log_data['category_id'] = $category_details->id;
+                                    $data_for_log_data['category_name'] = $category_details->name;
+                                    $data_for_log_data['category_short_name'] = $category_details->short_name;
+                                    $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
+                                    $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
+                                    $data_for_log_data['qty'] = $MlSize2;
+                                    $data_for_log_data['purchase_price'] = NULL;
+                                    $data_for_log_data['vendor_id'] = NULL;
+                                    $data_for_log_data['vendor_name'] = NULL;
+                                    $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
+                                    $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
+                                    $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
+    
+                                    // Check if an entry already exists for the given company and invoice date
+                                    $sales_date_entry_found = DB::table($log_data_table_name)
+                                        ->where('company_id', $data['company_id'])
+                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
+                                        ->where('status', 'active')
+                                        ->first();
+    
+                                    if (!empty($sales_date_entry_found)) {
+                                        // Existing entry found: Decode and ensure it's an array
+                                        $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
                                         
-                                        $sales_price = DB::table('stocks')->where('company_id', $data['company_id'])->where('brand_id', $brand)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
-                                        
-                                        $logData = [];
-                                        $logData['company_id'] = $data['company_id'];
-        
-                                        // entry of this brand
-                                        $data_for_log_data = [];
-                                        $data_for_log_data['transaction_category'] = 'debit';
-                                        $data_for_log_data['transaction_type'] = 'sales';
-                                        $data_for_log_data['transaction_table_id'] = $Sales->id;
-                                        $data_for_log_data['brand_id'] = (int)$peg_size[0]['id'];
-                                        $data_for_log_data['brand_name'] = $peg_size[0]['name'];
-                                        $data_for_log_data['category_id'] = $category_details->id;
-                                        $data_for_log_data['category_name'] = $category_details->name;
-                                        $data_for_log_data['category_short_name'] = $category_details->short_name;
-                                        $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
-                                        $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
-                                        $data_for_log_data['qty'] = $MlSize3;
-                                        $data_for_log_data['purchase_price'] = NULL;
-                                        $data_for_log_data['vendor_id'] = NULL;
-                                        $data_for_log_data['vendor_name'] = NULL;
-                                        $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
-                                        $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
-                                        $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
-        
-                                        // Check if an entry already exists for the given company and invoice date
-                                        $sales_date_entry_found = DB::table($log_data_table_name)
-                                            ->where('company_id', $data['company_id'])
-                                            ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
-                                            ->where('status', 'active')
-                                            ->first();
-        
-                                        if (!empty($sales_date_entry_found)) {
-                                            // Existing entry found: Decode and ensure it's an array
-                                            $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
-                                            
-                                            // Check if the existing data is an array; if not, convert it to an array
-                                            if (!is_array($existing_data)) {
-                                                $existing_data = [$existing_data];
-                                            }
-        
-                                            // Append new data
-                                            $existing_data[] = $data_for_log_data;
-        
-                                            // Re-encode the updated data back to JSON
-                                            $logData['data'] = json_encode($existing_data);
-        
-                                            // Update the existing entry with the new data
-                                            DB::table($log_data_table_name)
-                                                ->where('id', $sales_date_entry_found->id)
-                                                ->update([
-                                                    'data' => $logData['data'],
-                                                    'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
-                                                ]);
-                                        } else {
-                                            // No existing entry found: Insert new data
-                                            $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                            $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
-        
-                                            DB::table($log_data_table_name)->insert($logData);
+                                        // Check if the existing data is an array; if not, convert it to an array
+                                        if (!is_array($existing_data)) {
+                                            $existing_data = [$existing_data];
                                         }
+    
+                                        // Append new data
+                                        $existing_data[] = $data_for_log_data;
+    
+                                        // Re-encode the updated data back to JSON
+                                        $logData['data'] = json_encode($existing_data);
+    
+                                        // Update the existing entry with the new data
+                                        DB::table($log_data_table_name)
+                                            ->where('id', $sales_date_entry_found->id)
+                                            ->update([
+                                                'data' => $logData['data'],
+                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
+                                            ]);
+                                    } else {
+                                        // No existing entry found: Insert new data
+                                        $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+    
+                                        DB::table($log_data_table_name)->insert($logData);
+                                    }
+
+                                }
+                                if ($dataAr['cocktail'] > 0) {
+                                    $data['sale_price'] = ($spoAr1 * $stock->btl_selling_price) + ($spoAr2 * $stock->peg_selling_price);
+                                    $MlSize3 = ($peg_size[0]['btl_size'] * $spoAr1) + ($peg_size[0]['peg_size'] * $spoAr2);
+                                    $data['qty'] = $MlSize3;
+                                    $data['sales_type'] = 4;
+                                    $data['no_btl'] = $spoAr1;
+                                    $data['no_peg'] = $spoAr2;
+                                    $data['sales_main_id'] = $SalesMain->id;
+                                    $data['liquor_or_recipe'] = 'liquor';
+                                    $data['description'] = 'liquor sale';
+                                    $Sales = Sales::create($data);
+                                    $success = true;
+
+                                    if (!Schema::hasTable($log_data_table_name)) {
+                                        Schema::create($log_data_table_name, function (Blueprint $table) {
+                                            // Primary Key
+                                            $table->id();
+    
+                                            // Other Columns
+                                            $table->unsignedInteger('company_id')->nullable();
+                                            $table->date('log_date')->nullable();
+                                            $table->json('data')->nullable();
+                                            $table->enum('status', ['active', 'inactive'])->default('active');
+    
+                                            // Timestamps
+                                            $table->timestamp('created_at')->nullable()->default(DB::raw('CURRENT_TIMESTAMP'));
+                                            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
+                                        });
+                                    }
+    
+                                    $category_details = DB::table('categories')->where('id', $peg_size[0]['category_id'])->select('id','name','short_name')->first();
+                                    
+                                    $sales_price = DB::table('stocks')->where('company_id', $data['company_id'])->where('brand_id', $brand)->orderBy('id', 'desc')->select('btl_selling_price', 'peg_selling_price')->first();
+                                    
+                                    $logData = [];
+                                    $logData['company_id'] = $data['company_id'];
+    
+                                    // entry of this brand
+                                    $data_for_log_data = [];
+                                    $data_for_log_data['transaction_category'] = 'debit';
+                                    $data_for_log_data['transaction_type'] = 'sales';
+                                    $data_for_log_data['transaction_table_id'] = $Sales->id;
+                                    $data_for_log_data['brand_id'] = (int)$peg_size[0]['id'];
+                                    $data_for_log_data['brand_name'] = $peg_size[0]['name'];
+                                    $data_for_log_data['category_id'] = $category_details->id;
+                                    $data_for_log_data['category_name'] = $category_details->name;
+                                    $data_for_log_data['category_short_name'] = $category_details->short_name;
+                                    $data_for_log_data['btl_size'] = $peg_size[0]['btl_size'];
+                                    $data_for_log_data['peg_size'] = $peg_size[0]['peg_size'];
+                                    $data_for_log_data['qty'] = $MlSize3;
+                                    $data_for_log_data['purchase_price'] = NULL;
+                                    $data_for_log_data['vendor_id'] = NULL;
+                                    $data_for_log_data['vendor_name'] = NULL;
+                                    $data_for_log_data['tp_no'] = $sales_main_data['invoice_no'];
+                                    $data_for_log_data['sales_price'] = !empty($sales_price) && !empty($sales_price->btl_selling_price) && !empty($sales_price->peg_selling_price) ? $no_btl[$key] * $sales_price->btl_selling_price + $no_peg[$key] * $sales_price->peg_selling_price : 0;
+                                    $data_for_log_data['created_at'] = date('Y-m-d H:i:s');
+    
+                                    // Check if an entry already exists for the given company and invoice date
+                                    $sales_date_entry_found = DB::table($log_data_table_name)
+                                        ->where('company_id', $data['company_id'])
+                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
+                                        ->where('status', 'active')
+                                        ->first();
+    
+                                    if (!empty($sales_date_entry_found)) {
+                                        // Existing entry found: Decode and ensure it's an array
+                                        $existing_data = json_decode($sales_date_entry_found->data, true); // Decode JSON into an array
+                                        
+                                        // Check if the existing data is an array; if not, convert it to an array
+                                        if (!is_array($existing_data)) {
+                                            $existing_data = [$existing_data];
+                                        }
+    
+                                        // Append new data
+                                        $existing_data[] = $data_for_log_data;
+    
+                                        // Re-encode the updated data back to JSON
+                                        $logData['data'] = json_encode($existing_data);
+    
+                                        // Update the existing entry with the new data
+                                        DB::table($log_data_table_name)
+                                            ->where('id', $sales_date_entry_found->id)
+                                            ->update([
+                                                'data' => $logData['data'],
+                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
+                                            ]);
+                                    } else {
+                                        // No existing entry found: Insert new data
+                                        $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+    
+                                        DB::table($log_data_table_name)->insert($logData);
                                     }
                                 }
                             }
@@ -6308,7 +6316,7 @@ class Api extends Controller
             ->where('liquor_or_recipe', 'recipe')
             ->where(['sales.sales_main_id' => $request->id, 'sales.status' => 1])
             ->orderBy('sales.id', 'DESC')
-            ->groupBy('sales.description')
+            ->groupBy('sales.description', 'sales.sales_type')
             ->get();
 
             if ($recipeData->isNotEmpty()) {
