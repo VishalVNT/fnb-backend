@@ -5105,8 +5105,8 @@ class Api extends Controller
             
             $data['batch_no'] = !empty($dataArr['batch_no']) ? $dataArr['batch_no'] : null;
             $data['created_by'] = $request->user()->id;
-            $data['amount'] = !empty($dataArr['amount']) ? $dataArr['amount'] : 0;
-            $totalAmount = $totalAmount + !empty($dataArr['amount']) ? (int)$dataArr['amount'] * (int)$btl : 0;
+            $data['amount'] = !empty($dataArr['rate']) ? $dataArr['rate'] : 0;
+            $totalAmount = $totalAmount + !empty($dataArr['rate']) ? (int)$dataArr['rate'] * (int)$btl : 0;
             $data['isInvoice'] = $data['amount'] > 0 ? 1 : 0;
 
             if (in_array($dataArr['invoiceNo'], $invoiceArray)) {
@@ -5168,7 +5168,12 @@ class Api extends Controller
                 $data_for_log_data['btl_size'] = $brandSize[0]['btl_size'];
                 $data_for_log_data['peg_size'] = $brandSize[0]['peg_size'];
                 $data_for_log_data['qty'] = $MlSize;
-                $data_for_log_data['purchase_price'] = !empty($purchase_price) && !empty($purchase_price->cost_price) ? $purchase_price->cost_price * $nobtl[$key] : 0;
+                if(!empty($dataArr['rate']))
+                {
+                    $data_for_log_data['purchase_price'] = $dataArr['rate'];
+                }else{
+                    $data_for_log_data['purchase_price'] = !empty($purchase_price) && !empty($purchase_price->cost_price) ? $purchase_price->cost_price * $nobtl[$key] : 0;
+                }
                 $data_for_log_data['vendor_id'] = $supplier[0]['id'];
                 $data_for_log_data['vendor_name'] = $supplier[0]['name'];
                 $data_for_log_data['tp_no'] = $dataArr['invoiceNo'];
@@ -5281,7 +5286,7 @@ class Api extends Controller
         if(!empty($last_invoice_no)){
             $invoice = $last_invoice_no->invoice_no + 1;
             // check if this invoice is not assigned to any other
-            $check_auto_created_invoice = SalesMain::whe3re('status','1')->where('is_deleted','0')->where('invoice_no',$invoice)->first();
+            $check_auto_created_invoice = SalesMain::where('status','1')->where('is_deleted','0')->where('invoice_no',$invoice)->first();
 
             if(!empty($check_auto_created_invoice)){
                 $sales_main_data['invoice_no'] = rand(1111,9999);
