@@ -35,167 +35,296 @@ class Api extends Controller
     public function register(Request $request)
     {
         try {
-            $data = $request->validate(
-                [
-                    'name' => 'required|string',
-                    'mobile' => 'required|string|unique:users',
-                    'email' => 'required|string|unique:users',
-                    'password' => 'required|string',
-                    'c_password' => 'required|string|same:password',
-                ]
-            );
+            $data = $request->validate([
+                'name' => 'required|string',
+                'mobile' => 'required|string',
+                'email' => 'required|string',
+                'password' => 'required|string',
+                'c_password' => 'required|string|same:password',
+            ]);
         } catch (Throwable $e) {
             return response()->json([
                 'message' => 'Incorrect inputs',
                 'type' => 'failed'
-            ], 401);
+            ], 400);
         }
-        $data['company_id'] = $request->company_id ? $request->company_id : 0;
-        $data['read'] = json_encode($request->read);
-        $data['write_module'] = json_encode($request->write);
-        $writeArr = [];
-        foreach ($request->read as $read) {
-            if ($read == 'company')
-                array_push($writeArr, "manage company");
-            if ($read == 'supplier')
-                array_push($writeArr, "manage supplier");
-            if ($read == 'category')
-                array_push($writeArr, "category");
-            if ($read == 'brand')
-                array_push($writeArr, "manage brand");
-            if ($read == 'tp')
-                array_push($writeArr, "manage tp");
-            if ($read == 'sale')
-                array_push($writeArr, "manage sale");
-            if ($read == 'transfer')
-                array_push($writeArr, "Manage Transfer");
-            if ($read == 'menu master')
-                array_push($writeArr, "Manage Menu");
-            if ($read == 'stocks')
-                array_push($writeArr, "stocks");
-            if ($read == 'user')
-                array_push($writeArr, "Manage User");
-        }
-        // if the count of manage pages are 20 than user will get edit and delete option
-        foreach ($request->write as $write) {
-            if ($write == 'company')
-                array_push($writeArr, "create companies", "link companies", "manage company");
-            if ($write == 'supplier')
-                array_push($writeArr, "create supplier", "manage supplier");
-            if ($write == 'category')
-                array_push($writeArr, "category");
-            if ($write == 'brand')
-                array_push($writeArr, "type master", "create brand", "manage brand");
-            if ($write == 'tp')
-                array_push($writeArr, "Tp entry", "manage tp");
-            if ($write == 'sale')
-                array_push($writeArr, "create sale", "manage sale");
-            if ($write == 'transfer')
-                array_push($writeArr, "Transfer Entry", "Manage Transfer");
-            if ($write == 'menu master')
-                array_push($writeArr, "Create Menu", "Manage Menu");
-            if ($write == 'stocks')
-                array_push($writeArr, "stocks");
-            if ($write == 'user')
-                array_push($writeArr, "Create User", "Manage User");
-        }
-        $data['write'] = json_encode($writeArr);
-        $data['password'] = bcrypt($data['password']);
-        $data['type'] = $request->type; // type client
-        $data['created_by'] = $request->user()->id;
-        $admin = new User($data);
-        if ($admin->save()) {
+        
+        // Check if email or mobile is already in the database with status=1
+        $duplicateUser = User::where('status', 1)
+            ->where(function ($query) use ($request) {
+                $query->where('mobile', $request->mobile)
+                      ->orWhere('email', $request->email);
+            })->first();
+        
+        if ($duplicateUser) {
             return response()->json([
-                'message' => 'Admin registered',
+                'message' => 'User with this mobile/email already exists.',
+                'type' => 'failed'
+            ], 400);
+        }
+        
+        // Default values for `company_id`, `read`, and `write`
+        $data['company_id'] = $request->company_id ?? 0;
+        
+        $writeArr = [];
+        if ($request->type == 1) {
+            // Handle type 1 users
+            $data['read'] = json_encode($request->read ?? []);
+            
+            // Map permissions based on the 'read' input
+            foreach ($request->read as $read) {
+                switch ($read) {
+                    case 'company':
+                        $writeArr[] = "manage company";
+                        break;
+                    case 'supplier':
+                        $writeArr[] = "manage supplier";
+                        break;
+                    case 'brand':
+                        $writeArr[] = "manage brand";
+                        break;
+                    case 'tp':
+                        $writeArr[] = "manage tp";
+                        break;
+                    case 'category':
+                        $writeArr[] = "category";
+                        break;
+                    case 'sales':
+                        $writeArr[] = "manage sale";
+                        break;
+                    case 'transfer':
+                        $writeArr[] = "Manage Transfer";
+                        break;
+                    case 'menu master':
+                        $writeArr[] = "Manage Menu";
+                        break;
+                    case 'stocks':
+                        $writeArr[] = "stocks";
+                        break;
+                    case 'reports':
+                        $writeArr[] = "reports";
+                        $writeArr[] = "flr";
+                        break;
+                    case 'user':
+                        $writeArr[] = "Manage User";
+                        break;
+                }
+            }
+        
+            // Add 'write' permissions based on the 'write' input
+            foreach ($request->write ?? [] as $write) {
+                switch ($write) {
+                    case 'company':
+                        $writeArr = array_merge($writeArr, ["create companies", "link companies", "manage company"]);
+                        break;
+                    case 'supplier':
+                        $writeArr = array_merge($writeArr, ["create supplier", "manage supplier"]);
+                        break;
+                    case 'brand':
+                        $writeArr = array_merge($writeArr, ["type master", "create brand", "manage brand"]);
+                        break;
+                    case 'category':
+                        $writeArr[] = "category";
+                        break;
+                    case 'tp':
+                        $writeArr = array_merge($writeArr, ["Tp entry", "manage tp"]);
+                        break;
+                    case 'sales':
+                        $writeArr = array_merge($writeArr, ["create sale", "manage sale"]);
+                        break;
+                    case 'transfer':
+                        $writeArr = array_merge($writeArr, ["Transfer Entry", "Manage Transfer"]);
+                        break;
+                    case 'menu master':
+                        $writeArr = array_merge($writeArr, ["Create Menu", "Manage Menu"]);
+                        break;
+                    case 'stocks':
+                        $writeArr[] = "stocks";
+                        break;
+                    case 'user':
+                        $writeArr = array_merge($writeArr, ["Create User", "Manage User"]);
+                        break;
+                }
+            }
+        
+            // Encrypt password and prepare data for saving
+            $data['password'] = bcrypt($request->password);
+            $data['raw_password'] = $request->password;
+            $data['write_module'] = json_encode($request->write ?? []);
+            $data['write'] = json_encode($writeArr);
+        } else {
+            // Handle type 0 users with default permissions
+            $defaultModules = ["company", "supplier", "category", "brand", "tp", "sales", "transfer", "menu master", "stocks", "user", "reports", "flr", "setting"];
+            $data['read'] = json_encode($defaultModules);
+            $data['write_module'] = json_encode($defaultModules);
+        
+            $defaultPermissions = [
+                "manage company", "manage supplier", "manage brand", "manage tp", "category",
+                "manage sale", "Manage Transfer", "Manage Menu", "stocks", "reports", "flr",
+                "Create User", "Manage User", "create companies", "link companies", "type master",
+                "create brand", "Tp entry", "create sale", "Transfer Entry", "Create Menu"
+            ];
+            $data['write'] = json_encode($defaultPermissions);
+        }
+        
+        // Hash the password securely
+        $data['password'] = bcrypt($data['password']);
+        $data['raw_password'] = $request->password;
+        $data['type'] = $request->type; // type client/admin
+        $data['created_by'] = $request->user()->id;
+        
+        // Save the user to the database
+        $admin = User::create($data);
+        
+        if ($admin) {
+            $message = $request->type == 1 ? 'Admin registered' : 'Client registered';
+            return response()->json([
+                'message' => $message,
                 'type' => 'success'
             ], 201);
         } else {
             return response()->json([
                 'message' => 'Oops! Operation failed',
                 'type' => 'failed'
-            ], 401);
+            ], 400);
         }
+        
     }
+
     public function updateUser(Request $request)
     {
         try {
-            $data = $request->validate(
-                [
-                    'name' => 'required|string',
-                    'mobile' => 'required|string',
-                    'email' => 'required|string',
-                ]
-            );
+            $data = $request->validate([
+                'name' => 'required|string',
+                'mobile' => 'required|string',
+                'email' => 'required|string',
+                'password' => 'required|string',
+            ]);
         } catch (Throwable $e) {
             return response()->json([
                 'message' => 'Incorrect inputs',
-                'type' => 'failed'
+                'type' => 'failed',
             ], 401);
         }
+        
         $writeArr = [];
         if ($request->type == 1) {
-            $data['read'] = json_encode($request->read);
+            // Handle type 1 users
+            $data['read'] = json_encode($request->read ?? []);
+            
+            // Map permissions based on the 'read' input
             foreach ($request->read as $read) {
-                if ($read == 'company')
-                    array_push($writeArr, "manage company");
-                if ($read == 'supplier')
-                    array_push($writeArr, "manage supplier");
-                if ($read == 'brand')
-                    array_push($writeArr, "manage brand");
-                if ($read == 'tp')
-                    array_push($writeArr, "manage tp");
-                if ($read == 'category')
-                    array_push($writeArr, "category");
-                if ($read == 'sales')
-                    array_push($writeArr, "manage sale");
-                if ($read == 'transfer')
-                    array_push($writeArr, "Manage Transfer");
-                if ($read == 'menu master')
-                    array_push($writeArr, "Manage Menu");
-                if ($read == 'stocks')
-                    array_push($writeArr, "stocks");
-                if ($read == 'reports')
-                    array_push($writeArr, "reports", "flr");
-                if ($read == 'user')
-                    array_push($writeArr, "Manage User");
+                switch ($read) {
+                    case 'company':
+                        $writeArr[] = "manage company";
+                        break;
+                    case 'supplier':
+                        $writeArr[] = "manage supplier";
+                        break;
+                    case 'brand':
+                        $writeArr[] = "manage brand";
+                        break;
+                    case 'tp':
+                        $writeArr[] = "manage tp";
+                        break;
+                    case 'category':
+                        $writeArr[] = "category";
+                        break;
+                    case 'sales':
+                        $writeArr[] = "manage sale";
+                        break;
+                    case 'transfer':
+                        $writeArr[] = "Manage Transfer";
+                        break;
+                    case 'menu master':
+                        $writeArr[] = "Manage Menu";
+                        break;
+                    case 'stocks':
+                        $writeArr[] = "stocks";
+                        break;
+                    case 'reports':
+                        $writeArr[] = "reports";
+                        $writeArr[] = "flr";
+                        break;
+                    case 'user':
+                        $writeArr[] = "Manage User";
+                        break;
+                }
             }
-            // if the count of manage pages are 2 than user will get edit and delete option
-            foreach ($request->write as $write) {
-                if ($write == 'company')
-                    array_push($writeArr, "create companies", "link companies", "manage company");
-                if ($write == 'supplier')
-                    array_push($writeArr, "create supplier", "manage supplier");
-                if ($write == 'brand')
-                    array_push($writeArr, "type master", "create brand", "manage brand");
-                if ($write == 'category')
-                    array_push($writeArr, "category");
-                if ($write == 'tp')
-                    array_push($writeArr, "Tp entry", "manage tp");
-                if ($write == 'sales')
-                    array_push($writeArr, "create sale", "manage sale");
-                if ($write == 'transfer')
-                    array_push($writeArr, "Transfer Entry", "Manage Transfer");
-                if ($write == 'menu master')
-                    array_push($writeArr, "Create Menu", "Manage Menu");
-                if ($write == 'stocks')
-                    array_push($writeArr, "stocks");
-                if ($write == 'user')
-                    array_push($writeArr, "Create User", "Manage User");
+        
+            // Add 'write' permissions based on the 'write' input
+            foreach ($request->write ?? [] as $write) {
+                switch ($write) {
+                    case 'company':
+                        $writeArr = array_merge($writeArr, ["create companies", "link companies", "manage company"]);
+                        break;
+                    case 'supplier':
+                        $writeArr = array_merge($writeArr, ["create supplier", "manage supplier"]);
+                        break;
+                    case 'brand':
+                        $writeArr = array_merge($writeArr, ["type master", "create brand", "manage brand"]);
+                        break;
+                    case 'category':
+                        $writeArr[] = "category";
+                        break;
+                    case 'tp':
+                        $writeArr = array_merge($writeArr, ["Tp entry", "manage tp"]);
+                        break;
+                    case 'sales':
+                        $writeArr = array_merge($writeArr, ["create sale", "manage sale"]);
+                        break;
+                    case 'transfer':
+                        $writeArr = array_merge($writeArr, ["Transfer Entry", "Manage Transfer"]);
+                        break;
+                    case 'menu master':
+                        $writeArr = array_merge($writeArr, ["Create Menu", "Manage Menu"]);
+                        break;
+                    case 'stocks':
+                        $writeArr[] = "stocks";
+                        break;
+                    case 'user':
+                        $writeArr = array_merge($writeArr, ["Create User", "Manage User"]);
+                        break;
+                }
             }
+        
+            // Encrypt password and prepare data for saving
+            $data['password'] = bcrypt($request->password);
+            $data['raw_password'] = $request->password;
+            $data['write_module'] = json_encode($request->write ?? []);
             $data['write'] = json_encode($writeArr);
-            $data['write_module'] = json_encode($request->write);
+        } else {
+            // Handle type 0 users with default permissions
+            $defaultModules = ["company", "supplier", "category", "brand", "tp", "sales", "transfer", "menu master", "stocks", "user", "reports", "flr", "setting"];
+            $data['read'] = json_encode($defaultModules);
+            $data['write_module'] = json_encode($defaultModules);
+        
+            $defaultPermissions = [
+                "manage company", "manage supplier", "manage brand", "manage tp", "category",
+                "manage sale", "Manage Transfer", "Manage Menu", "stocks", "reports", "flr",
+                "Create User", "Manage User", "create companies", "link companies", "type master",
+                "create brand", "Tp entry", "create sale", "Transfer Entry", "Create Menu"
+            ];
+        
+            $data['password'] = bcrypt($request->password);
+            $data['raw_password'] = $request->password;
+            $data['write'] = json_encode($defaultPermissions);
         }
-        if (User::where(['id' => $request->id])->update($data)) {
+        
+        // Update the user
+        if (User::where('id', $request->id)->update($data)) {
+            $message = $request->type == 1 ? 'Admin updated' : 'Client updated';
             return response()->json([
-                'message' => 'Admin Updated',
-                'type' => 'success'
+                'message' => $message,
+                'type' => 'success',
             ], 201);
         } else {
             return response()->json([
                 'message' => 'Oops! Operation failed',
-                'type' => 'failed'
+                'type' => 'failed',
             ], 401);
         }
+        
     }
 
     public function deleteUser(Request $request)
@@ -370,8 +499,10 @@ class Api extends Controller
         $data = $request->validate([
             'name' => 'required|string',
             'short_name' => 'required|string',
+            'parent_category_name' => 'required|string',
 
         ]);
+        $data['parent_category_name'] = strtoupper($data['parent_category_name']);
         $data['name'] = strtoupper($data['name']);
         $data['short_name'] = strtoupper($data['short_name']);
         $data['created_by'] = $request->user()->id;
@@ -543,22 +674,28 @@ class Api extends Controller
                 $category = Category::select('id')->where([['name', 'like', '%' . $dataArr['category'] . '%'], 'status' => 1])->first();
                 $type = Subcategory::select('id')->where([['name', 'like', '%' . $dataArr['type'] . '%'], 'status' => 1])->first();
 
-                $data['category_id'] = $category->id ?? null;
-                $data['subcategory_id'] = $type->id ?? null;
-                $data['name'] = $dataArr['brand_name'];
-                $data['short_name'] = $dataArr['short_name'];
-                $data['btl_size'] = $dataArr['btl_size'];
-                $data['peg_size'] = $dataArr['peg_size'];
-                $data['created_by'] = $request->user()->id;
-
-                $brand = new Brand($data);
-
-                if ($brand->save()) {
-                    $success++;
-                } else {
+                if(!empty($category) && !empty($type))
+                {
+                    $data['category_id'] = $category->id ?? null;
+                    $data['subcategory_id'] = $type->id ?? null;
+                    $data['name'] = $dataArr['brand_name'];
+                    $data['short_name'] = $dataArr['short_name'];
+                    $data['btl_size'] = $dataArr['btl_size'];
+                    $data['peg_size'] = $dataArr['peg_size'];
+                    $data['created_by'] = $request->user()->id;
+    
+                    $brand = new Brand($data);
+                    if ($brand->save()) {
+                        $success++;
+                    } else {
+                        array_push($failedData, $dataArr);
+                        $fail++;
+                    }
+                }else{
                     array_push($failedData, $dataArr);
-                    $fail++;
+                        $fail++;
                 }
+
             } else {
                 array_push($failedData, $dataArr);
                 $fail++;
@@ -1696,7 +1833,7 @@ class Api extends Controller
             $log_save = SaveLog($data_log);
             if (($log_save)) {
                 return response()->json([
-                    'message' => 'Recipe Added',
+                    'message' => 'Brands Linked Successfully',
                     'type' => 'success'
                 ], 201);
             } else {
@@ -1774,7 +1911,7 @@ class Api extends Controller
     // get fetch user
     public function fetchUser(Request $request)
     {
-        $data = User::select('id', 'name', 'mobile', 'email', 'roles')->where(['status' => 1, ['name', 'like', '%' . $request->keyword . '%']])->get()->first();
+        $data = User::select('id', 'name', 'mobile', 'email', 'roles','raw_password')->where(['status' => 1, ['name', 'like', '%' . $request->keyword . '%']])->get()->first();
         if ($data) {
             return response()->json($data);
         } else {
@@ -1786,7 +1923,7 @@ class Api extends Controller
     }
     public function fetchUserId(Request $request)
     {
-        $data = User::select('id', 'name', 'mobile', 'email', 'type', 'read', 'write', 'write_module')->where(['status' => 1, 'id' => $request->id])->get()->first();
+        $data = User::select('id', 'name', 'mobile', 'email', 'type', 'read', 'write', 'write_module','raw_password')->where(['status' => 1, 'id' => $request->id])->get()->first();
         if ($data) {
             return response()->json($data);
         } else {
@@ -1848,7 +1985,7 @@ class Api extends Controller
 
         if(!empty($data)){
             foreach($data as $key => $value){
-                $checkforCategoryActiveOrNot = Purchase::where('purchase_list_id',$value->id)->join('categories', 'categories.id', '=', 'purchases.category_id')->where('purchases.status', 1)->where('purchases.is_deleted',0)->where('categories.status', 1)->where('categories.is_deleted',0)->count();
+                $checkforCategoryActiveOrNot = Purchase::where('purchase_list_id',$value->id)->where('company_id', $request->company_id)->join('categories', 'categories.id', '=', 'purchases.category_id')->where('purchases.status', 1)->where('purchases.is_deleted',0)->where('categories.status', 1)->where('categories.is_deleted',0)->count();
                 if($checkforCategoryActiveOrNot > 0){
                     $value->total_item = $checkforCategoryActiveOrNot;
                     array_push($purchaseData, $value);
@@ -3545,7 +3682,7 @@ class Api extends Controller
             'main_id' => 'required',
             'invoice_no' => 'required',
             'invoice_date' => 'required',
-            'type' => 'required',
+            // 'type' => 'required',
             'company_id' => 'required',
         ]);
 
@@ -4458,7 +4595,7 @@ class Api extends Controller
             // 'branch_id' => 'required',
         ]);
 
-        $datas = Recipe::select('recipe_code','category_id','serving_size', 'name')->where(['company_id' => $input['company_id'], 'status' => 1, 'is_cocktail' => 1 ])->where('brand_id', '!=', '0')->get();
+        $datas = Recipe::select('recipe_code','category_id','serving_size', 'name')->where(['company_id' => $input['company_id'], 'status' => 1 ])->where('brand_id', '!=', '0')->get();
         $res = [];
         $checker = [];
         $i = 0;
@@ -5081,7 +5218,7 @@ class Api extends Controller
             $brandName = $dataArr['brand'];
             $btl = intval($dataArr['total']);
             $data['invoice_no'] = $dataArr['invoiceNo'];
-            $data['invoice_date'] = date('Y-m-d', strtotime($dataArr['date'] . ' +1 day'));
+            $data['invoice_date'] = date('Y-m-d', strtotime($dataArr['date']));
             $supplier = Supplier::select('id', 'name')->where([['name', 'like', '%' . $dataArr['supplier'] . '%']])->get();
             
             if (empty($supplier[0]['id'])) {
@@ -5105,9 +5242,9 @@ class Api extends Controller
             
             $data['batch_no'] = !empty($dataArr['batch_no']) ? $dataArr['batch_no'] : null;
             $data['created_by'] = $request->user()->id;
-            $data['amount'] = !empty($dataArr['rate']) ? $dataArr['rate'] : 0;
+            $data['mrp'] = !empty($dataArr['rate']) ? $dataArr['rate'] : 0;
             $totalAmount = $totalAmount + !empty($dataArr['rate']) ? (int)$dataArr['rate'] * (int)$btl : 0;
-            $data['isInvoice'] = $data['amount'] > 0 ? 1 : 0;
+            $data['isInvoice'] = $data['mrp'] > 0 ? 1 : 0;
 
             if (in_array($dataArr['invoiceNo'], $invoiceArray)) {
                 $purchaseCount[$dataArr['invoiceNo']]['count'] = $purchaseCount[$dataArr['invoiceNo']]['count'] + 1;
@@ -5127,8 +5264,8 @@ class Api extends Controller
             
             if ($save) {
 
-                $year = !empty($dataArr['date']) ? date('Y', strtotime($dataArr['date'] . ' +1 day')) : date('Y');
-                $month = !empty($dataArr['date']) ? date('m', strtotime($dataArr['date'] . ' +1 day')) : date('m');
+                $year = !empty($dataArr['date']) ? date('Y', strtotime($dataArr['date'])) : date('Y');
+                $month = !empty($dataArr['date']) ? date('m', strtotime($dataArr['date'])) : date('m');
                 $log_data_table_name = $year . '_' . $month . '_log_data';
 
                 if (!Schema::hasTable($log_data_table_name)) {
@@ -5183,7 +5320,7 @@ class Api extends Controller
                 // Check if an entry already exists for the given company and invoice date
                 $invoice_date_entry_found = DB::table($log_data_table_name)
                     ->where('company_id', $company_id)
-                    ->where('log_date', date('Y-m-d', strtotime($dataArr['date'] . ' +1 day')))
+                    ->where('log_date', date('Y-m-d', strtotime($dataArr['date'])))
                     ->where('status', 'active')
                     ->first();
 
@@ -5207,12 +5344,12 @@ class Api extends Controller
                         ->where('id', $invoice_date_entry_found->id)
                         ->update([
                             'data' => $logData['data'],
-                            'log_date' => date('Y-m-d', strtotime($dataArr['date'] . ' +1 day')),
+                            'log_date' => date('Y-m-d', strtotime($dataArr['date'])),
                         ]);
                 } else {
                     // No existing entry found: Insert new data
                     $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                    $logData['log_date'] = date('Y-m-d', strtotime($dataArr['date'] . ' +1 day'));
+                    $logData['log_date'] = date('Y-m-d', strtotime($dataArr['date']));
 
                     DB::table($log_data_table_name)->insert($logData);
                 }
@@ -5355,8 +5492,8 @@ class Api extends Controller
                                     $Sales = Sales::create($data);
                                     $success = true;
     
-                                    $year = !empty($dataAr['date'] . ' +1 day') ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
-                                    $month = !empty($dataAr['date'] . ' +1 day') ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
+                                    $year = !empty($dataAr['date']) ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
+                                    $month = !empty($dataAr['date']) ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
                                     $log_data_table_name = $year . '_' . $month . '_log_data';
     
                                     if (!Schema::hasTable($log_data_table_name)) {
@@ -5406,7 +5543,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $request->company_id)
-                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -5430,12 +5567,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -5504,7 +5641,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $request->company_id)
-                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -5528,12 +5665,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -5602,7 +5739,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $request->company_id)
-                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -5626,12 +5763,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -5700,7 +5837,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $request->company_id)
-                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -5724,12 +5861,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -5750,6 +5887,10 @@ class Api extends Controller
                                 $spoAr = explode('.', $dataAr['cocktail']);
                                 $spoAr1 = !empty($spoAr[0]) ? $spoAr[0] : 0;
                                 $spoAr2 = !empty($spoAr[1]) ? $spoAr[1] : 0;
+    
+                                $year = !empty($dataAr['date']) ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
+                                $month = !empty($dataAr['date']) ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
+                                $log_data_table_name = $year . '_' . $month . '_log_data';
         
                                 if($dataAr['sale'] > 0)
                                 {
@@ -5765,10 +5906,6 @@ class Api extends Controller
                                     $data['liquor_or_recipe'] = 'liquor';
                                     $data['description'] = 'liquor sale';
                                     $Sales = Sales::create($data);
-    
-                                    $year = !empty($dataAr['date'] . ' +1 day') ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
-                                    $month = !empty($dataAr['date'] . ' +1 day') ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
-                                    $log_data_table_name = $year . '_' . $month . '_log_data';
     
                                     if (!Schema::hasTable($log_data_table_name)) {
                                         Schema::create($log_data_table_name, function (Blueprint $table) {
@@ -6195,7 +6332,7 @@ class Api extends Controller
         $failed_data = [];
         $counter = 0;
         foreach ($dataArray as $key => $dataAr) {
-            $found = Recipe::where(['name' => $dataAr['name'],'company_id' => $request->company_id])->get()->count();
+            $found = Recipe::where(['name' => $dataAr['name'],'company_id' => $request->company_id], 'st')->get()->count();
             if ($found > 0) {
                 $dataAr['reason'] = 'Recipe Already In List';
                 array_push($failed_data, $dataAr);
@@ -6296,7 +6433,7 @@ class Api extends Controller
         if(!empty($salesId)){
             $liqourData = Sales::select('brands.name', 'brands.category_id', 'brands.id as brand_id',
                                         'brands.btl_size as size','brands.peg_size as peg_size', 
-                                        'sales.sales_type as type', 'sales.no_btl', 'sales.qty', 
+                                        'sales.sales_type', 'sales.no_btl', 'sales.qty', 
                                         'sales.no_peg', 'sales.sale_date', 'sales.id', 'sales.description',
                                         'subcategories.name as subcategory_name')
                                         ->where('liquor_or_recipe', 'liquor')
@@ -6307,23 +6444,25 @@ class Api extends Controller
                                         ->get();
             
             $recipeData = Sales::select(
-                'category_id',
-                'brand_id',
-                'recipe_id',
-                'sales.sales_type as type',
-                'sales.no_btl',
-                'sales.qty',
-                'sales.no_peg',
-                'sales.sale_date',
-                'sales.id',
-                'sales.description'
-            )
-            ->where('liquor_or_recipe', 'recipe')
-            ->where(['sales.sales_main_id' => $request->id, 'sales.status' => 1])
-            ->orderBy('sales.id', 'DESC')
-            ->groupBy('sales.description', 'sales.sales_type')
-            ->get();
-
+                                    'category_id',
+                                    'brand_id',
+                                    'recipe_id',
+                                    'sales.sales_type',
+                                    'sales.description',
+                                    DB::raw('SUM(sales.qty) as total_qty'),
+                                    DB::raw('SUM(sales.no_btl) as total_btl'),
+                                    DB::raw('SUM(sales.no_peg) as total_peg'),
+                                    'sales.no_btl',
+                                    'sales.no_peg',
+                                    'sales.sale_date',
+                                    'sales.id'
+                                )
+                                ->where('liquor_or_recipe', 'recipe')
+                                ->where(['sales.sales_main_id' => $request->id, 'sales.status' => 1])
+                                ->groupBy('sales.description', 'sales_type') // Add other necessary columns here
+                                ->orderBy('sales.id', 'DESC')
+                                ->get();
+                                
             if ($recipeData->isNotEmpty()) {
                 $recipeData = $recipeData->toArray(); // Convert the collection to an array
             
@@ -6342,10 +6481,10 @@ class Api extends Controller
                     }
             
                     // calculate glass
-                    $parameters_for_glass = Recipe::where('recipes.id',$value['recipe_id'])->join('brands','brands.id','recipes.brand_id')->select('peg_size','serving_size')->first();
+                    $parameters_for_glass = Recipe::where('recipes.id',$value['recipe_id'])->join('brands','brands.id','recipes.brand_id')->select('peg_size','btl_size','serving_size')->first();
 
                     if(!empty($parameters_for_glass)){
-                        $glassQty = ($value['no_peg'] * $parameters_for_glass->peg_size) / $parameters_for_glass->serving_size;
+                        $glassQty = (((int)$value['total_peg'] * $parameters_for_glass->peg_size) + (int)$value['total_btl'] * $parameters_for_glass->btl_size) / $parameters_for_glass->serving_size;
                         $value['glass_qty'] = round($glassQty);
 
                         // Get all the brands in this recipe
@@ -6409,6 +6548,11 @@ class Api extends Controller
 		$financialYearEnd = ($currentYear+1). '-03-31'; // Assuming March 31st as the end of the financial year
         $data = Purchase::where(['invoice_no' => $request->invoice_no, 'company_id' => $request->company_id,'vendor_id'=>$request->vendor_id, 'status' => 1])->whereBetween(DB::raw('DATE(created_at)'), [$financialYearStart, $financialYearEnd])->get()->count();
         return response()->json($data);
+    }
+    public function ValidateRecipeName(Request $request)
+    {
+        $recipeName = Recipe::where(['name' => $request->recipeName, 'company_id' => $request->company_id, 'status' => 1])->get()->count();
+        return response()->json($recipeName);
     }
     public function ValidateSalesInvoice(Request $request)
     {
@@ -6567,7 +6711,7 @@ class Api extends Controller
     }
     public function fetchPurchaseData(Request $request)
     {
-        $data = Purchase::select('brands.name', 'purchases.*','suppliers.name as supplier_name')->join('suppliers','suppliers.id','=','purchases.vendor_id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->join('categories', 'categories.id', '=', 'purchases.category_id')->where(['purchases.status' => 1, 'purchases.purchase_list_id' => $request->id, 'categories.status' => 1])->orderBy('id', 'DESC')->get();
+        $data = Purchase::select('brands.name', 'purchases.*','suppliers.name as supplier_name')->join('suppliers','suppliers.id','=','purchases.vendor_id')->join('brands', 'brands.id', '=', 'purchases.brand_id')->join('categories', 'categories.id', '=', 'purchases.category_id')->where(['purchases.status' => 1, 'purchases.purchase_list_id' => $request->id, 'categories.status' => 1,'purchases.company_id' => $request->company_id])->orderBy('id', 'DESC')->get();
         if ($data) {
             return response()->json($data);
         } else {
@@ -6632,6 +6776,7 @@ class Api extends Controller
                     $data['new_company_name'] = $request->company_to_id;
                 }
                 $data['company_id'] = $request->company_id;
+                $data['remark'] = !empty($request->remark) ? $request->remark : '';
                 $Transaction = Transaction::create($data);
                 if ($Transaction) {
                     // if (Stock::where(['company_id' => $request->company_id,  'brand_id' => $data['brand_id']])->decrement('qty', $MlSize)) {

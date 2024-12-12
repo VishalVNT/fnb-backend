@@ -1017,7 +1017,7 @@ class Reports extends Controller
 
         $categoryOrder = $all_categories->pluck('name')->all();
 
-        // Sort the $grouped_data based on the order of categories in $categoryOrder
+        // Sort the $grouped_data +based on the order of categories in $categoryOrder
         uksort($grouped_data, function($a, $b) use ($categoryOrder) {
             $posA = array_search($a, $categoryOrder);
             $posB = array_search($b, $categoryOrder);
@@ -1486,265 +1486,6 @@ class Reports extends Controller
             }
         }
     }
-
-    // public function StockRegisterReport(Request $request)
-    // {
-    //     $json = [];
-    //     $company_id = $request->company_id;
-    //     $categories = Category::where('status', 1)->select('id', 'name')->get();
-    //     $cat_array = array();
-
-    //     foreach ($categories as $category) {
-    //         $name = $category->name;
-    //         $id = $category->id;
-    //         $categoryData = [];
-
-    //         $stockData = DB::table('daily_opening_closing_log')
-    //                         ->where('category_id', $id)
-    //                         ->where('company_id', $company_id)
-    //                         // ->whereDate('log_date', '>=', $request->from_date)
-    //                         ->whereDate('log_date', '<=', $request->to_date)
-    //                         ->groupBy('brand_id')
-    //                         ->join('brands','daily_opening_closing_log.brand_id', 'brands.id')
-    //                         ->join('categories','brands.category_id', 'categories.id')
-    //                         ->get();
-
-    //         foreach ($stockData as $stock) {
-    //             $brandId = $stock->brand_id;
-    //             $brandDetails = DB::table('brands')->where('id', $brandId)->first();
-
-    //             if ($brandDetails) {
-    //                 $btl_size = $brandDetails->btl_size;
-
-    //                 // Initialize or increment values for each bottle size
-    //                 if (!isset($categoryData[$btl_size])) {
-    //                     $categoryData[$btl_size] = [
-    //                         'category_name' => $name,
-    //                         'brands' => [],
-    //                         'opening_balance' => 0,
-    //                         'purchase' => 0,
-    //                         'transfer' => 0,
-    //                         'total' => 0,
-    //                         'sales' => 0,
-    //                         'closing_balance' => 0,
-    //                     ];
-    //                 }
-
-    //                 $allCreditQty = 0;
-    //                 $allDebitQty = 0;
-    //                 $opening_qty = 0;
-    //                 $allCreditQty = DB::table('daily_opening_closing_log')
-    //                                 ->where('transaction_type', 'credit')
-    //                                 ->where('company_id', $company_id)
-    //                                 ->where('brand_id', $brandId)
-    //                                 ->whereDate('log_date', '<', date('Y-m-d', strtotime($request->from_date)))
-    //                                 ->sum('qty');
-
-    //                 $allDebitQty = DB::table('daily_opening_closing_log')
-    //                                 ->where('transaction_type', 'debit')
-    //                                 ->where('company_id', $company_id)
-    //                                 ->where('brand_id', $brandId)
-    //                                 ->whereDate('log_date', '<', date('Y-m-d', strtotime($request->from_date)))
-    //                                 ->sum('qty');
-
-                                            
-    //                 $opening_qty = (int)$allCreditQty - (int)$allDebitQty;
-    //                 $purchase_qty = $this->getPurchaseQty($company_id, $brandId, $request->from_date, $request->to_date);
-    //                 $sales_qty = $this->getSalesQty($company_id, $brandId, $request->from_date, $request->to_date);
-
-    //                 // transfer received qty
-    //                 $transfer_received_qty = DB::table('daily_opening_closing_log')
-    //                                             ->where('transaction_type', 'credit')
-    //                                             ->where('transaction_category', 'transfer')
-    //                                             ->where('company_id', $company_id)
-    //                                             ->where('brand_id', $brandId)
-    //                                             ->whereDate('log_date', '>=', date('Y-m-d', strtotime($request->from_date)))
-    //                                             ->whereDate('log_date', '<=', date('Y-m-d', strtotime($request->to_date)))
-    //                                             ->where('status', 'active')
-    //                                             ->sum('qty');
-
-    //                 // transfer sent qty
-    //                 $transfer_sent_qty = DB::table('daily_opening_closing_log')
-    //                                             ->where('transaction_type', 'debit')
-    //                                             ->where('transaction_category', 'transfer')
-    //                                             ->where('company_id', $company_id)
-    //                                             ->where('brand_id', $brandId)
-    //                                             ->whereDate('log_date', '>=', date('Y-m-d', strtotime($request->from_date)))
-    //                                             ->whereDate('log_date', '<=', date('Y-m-d', strtotime($request->to_date)))
-    //                                             ->where('status', 'active')
-    //                                             ->sum('qty');
-
-    //                 if($transfer_received_qty >= $transfer_sent_qty){
-    //                     $transaction_total_qty = $transfer_received_qty - $transfer_sent_qty;
-    //                 }else{
-    //                     $transaction_total_qty = abs($transfer_received_qty - $transfer_sent_qty);
-    //                 }
-    //                 $transfer_received_stock = convertBtlPeg($transfer_received_qty, $btl_size, $brandDetails->peg_size);
-    //                 $transfer_sent_stock = convertBtlPeg($transfer_sent_qty, $btl_size, $brandDetails->peg_size);
-    //                 $totalTransferStock = convertBtlPeg($transaction_total_qty, $btl_size, $brandDetails->peg_size);
-    //                 $opening_stock = convertBtlPeg($opening_qty, $btl_size, $brandDetails->peg_size);
-    //                 $purchase_stock = convertBtlPeg($purchase_qty, $btl_size, $brandDetails->peg_size);
-    //                 $sales_stock = convertBtlPeg($sales_qty, $btl_size, $brandDetails->peg_size);
-
-    //                 $totalInMl = $opening_qty + $purchase_qty + $transfer_received_qty;
-    //                 $closing_balance = $totalInMl - $sales_qty - $transfer_sent_qty;
-    //                 $closing_balance_in_btl_peg = convertBtlPeg($closing_balance, $btl_size, $brandDetails->peg_size);
-                    
-    //                 $transferReceived = $transfer_received_stock['btl'] . "." . $transfer_received_stock['peg'];
-    //                 $transferSent = $transfer_sent_stock['btl'] . "." . $transfer_sent_stock['peg'];
-    //                 $totalTransfer = $totalTransferStock['btl'] . "." . $totalTransferStock['peg'];
-    //                 $opening_balance = $opening_stock['btl'] . "." . $opening_stock['peg'];
-    //                 $purchase = $purchase_stock['btl'] . "." . $purchase_stock['peg'];
-    //                 $sales = $sales_stock['btl'] . "." . $sales_stock['peg'];
-    //                 $final_closing_balance = $closing_balance_in_btl_peg['btl'] . "." . $closing_balance_in_btl_peg['peg'];
-
-    //                 $total = floatval($opening_balance) + floatval($purchase) + floatval($transferReceived) - floatval($transferSent);
-                    
-
-
-    //                 // Update the brand details
-    //                 $brand = [
-    //                     'category_name' => '',
-    //                     'brand_name' => $brandDetails->name,
-    //                     'btl_size' => $btl_size,
-    //                     'opening_balance' => $opening_balance,
-    //                     'purchase' => $purchase,
-    //                     'transfer' => $transfer_received_qty >= $transfer_sent_qty ? $totalTransfer : -$totalTransfer,
-    //                     'total' => $total,
-    //                     'sales' => $sales,
-    //                     'closing_balance' => $final_closing_balance
-    //                 ];
-
-    //                 // Push brand to the array
-    //                 $categoryData[$btl_size]['brands'][] = $brand;
-
-    //                 // Update subtotals
-    //                 $categoryData[$btl_size]['opening_balance'] += floatval($opening_balance);
-    //                 $categoryData[$btl_size]['purchase'] += floatval($purchase);
-    //                 if($transfer_received_qty >= $transfer_sent_qty){
-    //                     $categoryData[$btl_size]['transfer'] += floatval($totalTransfer);
-    //                 }else{
-    //                     $categoryData[$btl_size]['transfer'] -= floatval($totalTransfer);
-    //                 }
-    //                 $categoryData[$btl_size]['total'] += floatval($total);
-    //                 $categoryData[$btl_size]['sales'] += floatval($sales);
-    //                 $categoryData[$btl_size]['closing_balance'] += floatval($final_closing_balance);
-    //             }
-    //         }
-
-    //         $currentIndex = 0;
-
-    //         // Add the subtotal for each bottle size
-    //         foreach ($categoryData as $btl_size => $data) {
-    //             $currentIndex++;
-    //             // Push category row if not added
-    //             if (!in_array($data['category_name'], $cat_array)) {
-    //                 array_push($json, [
-    //                     'category_name' => $data['category_name'],
-    //                     'brand_name' => '',
-    //                     'btl_size' => '',
-    //                     'opening_balance' => '',
-    //                     'purchase' => '',
-    //                     'transfer' => '',
-    //                     'total' => '',
-    //                     'sales' => '',
-    //                     'closing_balance' => ''
-    //                 ]);
-    //                 array_push($cat_array, $data['category_name']);
-    //             }
-
-    //             // Push all brand data
-    //             foreach ($data['brands'] as $brand) {
-    //                 array_push($json, $brand);
-    //             }
-
-    //             $category_id = DB::table('categories')->where('name', $data['category_name'])->select('id')->first();
-
-    //             $peg_size = DB::table('brands')->where('category_id',$category_id->id)->select('peg_size')->first();
-
-    //             if(!empty($peg_size)){
-
-    //                 $salesCalculationInPeg = $data['sales'];
-    //                 $transferCalculationInPeg = $data['transfer'];
-    //                 $closingBalanceCalculationInPeg = $data['closing_balance'];
-
-    //                 $sales_btl_and_peg = explode('.', $salesCalculationInPeg);
-    //                 $transfer_btl_and_peg = explode('.', $transferCalculationInPeg);
-    //                 $closing_btl_and_peg = explode('.', $closingBalanceCalculationInPeg);
-
-    //                 $salesBtl = $sales_btl_and_peg[0];
-
-    //                 if(!empty($sales_btl_and_peg[1])){
-    //                     $salesPeg = $sales_btl_and_peg[1];
-    //                 }else{
-    //                     $salesPeg = 0;
-    //                 }
-
-    //                 $transferBtl = $transfer_btl_and_peg[0];
-
-    //                 if(!empty($transfer_btl_and_peg[1])){
-    //                     $transferPeg = $transfer_btl_and_peg[1];
-    //                 }else{
-    //                     $transferPeg = 0;
-    //                 }
-
-    //                 $closingBtl = $closing_btl_and_peg[0];
-
-    //                 if(!empty($closing_btl_and_peg[1])){
-    //                     $closingPeg = $closing_btl_and_peg[1];
-    //                 }else{
-    //                     $closingPeg = 0;
-    //                 }
-
-    //                 $totalSalesQtyInMl = $btl_size * $salesBtl + $peg_size->peg_size * $salesPeg;
-    //                 $totalTransferQtyInMl = $btl_size * $transferBtl + $peg_size->peg_size * $transferPeg;
-    //                 $totalClosingQtyInMl = $btl_size * $closingBtl + $peg_size->peg_size * $closingPeg;
-
-    //                 $salesQtyInBtlPeg = convertBtlPeg($totalSalesQtyInMl, $btl_size, $peg_size->peg_size);
-    //                 $transferQtyInBtlPeg = convertBtlPeg($totalTransferQtyInMl, $btl_size, $peg_size->peg_size);
-    //                 $closingQtyInBtlPeg = convertBtlPeg($totalClosingQtyInMl, $btl_size, $peg_size->peg_size);
-                    
-    //                 $salesCalculationInPeg = $salesQtyInBtlPeg['btl'] . "." . $salesQtyInBtlPeg['peg'];
-    //                 $transferCalculationInPeg = $transferQtyInBtlPeg['btl'] . "." . $transferQtyInBtlPeg['peg'];
-    //                 $closingBalanceCalculationInPeg = $closingQtyInBtlPeg['btl'] . "." . $closingQtyInBtlPeg['peg'];
-    //             }else{
-    //                 $salesCalculationInPeg = $data['sales'];
-    //                 $transferCalculationInPeg = $data['transfer'];
-    //                 $closingBalanceCalculationInPeg = $data['closing_balance'];
-    //             }
-    //             // Push subtotal for current bottle size
-    //             array_push($json, [
-    //                 'category_name' => '',
-    //                 'brand_name' => 'SUBTOTAL (' . $btl_size . 'ml)',
-    //                 'btl_size' => $btl_size,
-    //                 'opening_balance' => $data['opening_balance'],
-    //                 'purchase' => $data['purchase'],
-    //                 'transfer' => $transferCalculationInPeg,
-    //                 'total' => $data['total'],
-    //                 'sales' => $salesCalculationInPeg,
-    //                 'closing_balance' => $closingBalanceCalculationInPeg,
-    //             ]);
-
-    //             $totalItems = count($categoryData);
-
-    //             if($currentIndex !== $totalItems){
-    //                 array_push($json, [
-    //                     'category_name' => $data['category_name'],
-    //                     'brand_name' => '',
-    //                     'btl_size' => '',
-    //                     'opening_balance' => '',
-    //                     'purchase' => '',
-    //                     'transfer' => '',
-    //                     'total' => '',
-    //                     'sales' => '',
-    //                     'closing_balance' => ''
-    //                 ]);
-    //             }
-
-    //         }
-    //     }
-    //     return json_encode($json);
-    // }
 
     private function getPurchaseQty($company_id, $brandId, $from_date, $to_date)
     {
@@ -2455,6 +2196,7 @@ class Reports extends Controller
         // Fetch purchase and sales data for all dates in the range
         $purchasesData = Purchase::where('company_id', $company_id)
             ->whereBetween('invoice_date', [$fromDate, $toDate])
+            ->where('status',1)
             ->select('brand_id', 'invoice_no', DB::raw('COALESCE(SUM(qty), 0) as qty'), 'invoice_date')
             ->groupBy('invoice_date', 'brand_id')
             ->get()
@@ -2465,6 +2207,7 @@ class Reports extends Controller
                         ->whereBetween('log_date', [$fromDate, $toDate])
                         ->where('transaction_type','credit')
                         ->where('transaction_category','transfer')
+            ->where('status',1)
                         ->select('brand_id', 'transaction_type', DB::raw('SUM(qty) as qty'),'log_date')
                         ->get()
                         ->groupBy('log_date');
@@ -2474,6 +2217,7 @@ class Reports extends Controller
                         ->whereBetween('log_date', [$fromDate, $toDate])
                         ->where('transaction_type','debit')
                         ->where('transaction_category','transfer')
+            ->where('status',1)
                         ->select('brand_id', 'transaction_type', DB::raw('SUM(qty) as qty'),'log_date')
                         ->get()
                         ->groupBy('log_date');
@@ -2788,28 +2532,166 @@ class Reports extends Controller
         foreach ($get_array_keys as $array_val) {
             $exists_in_final_json = false;
             $counter = 0;
-
-            foreach ($final_json as $final_json_val) {
+            foreach ($final_json as $final_json_key => $final_json_val) {
 
                 if (isset($final_json_val[$array_val])) {
                     $exists_in_final_json = true;
                     // Check if the value at `$array_val` is 'Opening'
                     if ($final_json_val[$array_val] === 'Opening') {
                         $data = [$array_val => 'Opening'] + $previousClosing; // Merge arrays
+						$final_json_to_pass[] = $data;
                     } else {
-                        $data = $final_json_val;
-                    }
+						
+						if($final_json_val[$array_val] === 'Total')
+						{								
+							$closingData = [];
+							$purchaseData = [];
+							
+							if(array_key_exists($final_json_key - 4, $final_json))
+							{
+								foreach($final_json_to_pass as $getClosingData)
+								{
+									foreach($getClosingData as $ck => $cv)
+									{
+										$date = new DateTime($array_val);
 
-                    $final_json_to_pass[] = $data;
+										$date->modify('-1 day');
+										$previousDay = $date->format('Y-m-d');
 
-                    if ($final_json_val[$array_val] !== 'TP No') {
-                        // Update `previousClosing` with non-date keys
-                        foreach ($final_json_val as $prev_key => $prev_val) {
-                            if (!strtotime($prev_key)) {
-                                $previousClosing[$prev_key] = $prev_val;
-                            }
-                        }
-                    }
+										if($ck == $previousDay && $cv == 'Closing')
+										{
+											$closingData = $getClosingData;
+											break;
+										}
+									}
+								}
+							}else{
+								foreach($final_json_to_pass as $getClosingData)
+								{
+									foreach($getClosingData as $ck => $cv)
+									{
+										if($ck == $array_val && $cv == 'Opening')
+										{
+											$closingData = $getClosingData;
+											break;
+										}
+									}
+								}
+							}							
+							$purchaseData = [];
+							foreach($final_json_to_pass as $getPurchaseData)
+							{
+								foreach($getPurchaseData as $pk => $pv)
+								{
+									if($pk == $array_val && $pv == 'Purchase')
+									{
+										$purchaseData = $getPurchaseData;
+										break;
+									}
+								}
+							}
+							$dataForTotal = [];
+							$dataForTotal[$array_val] = 'Total';
+
+							foreach($closingData as $add_closing_data_to_total_key => $add_closing_data_to_total_val)
+							{
+								if(array_key_exists($final_json_key - 4, $final_json)){
+									if($add_closing_data_to_total_val !== 'Closing')
+									{
+										$dataForTotal[$add_closing_data_to_total_key] = number_format((float)$add_closing_data_to_total_val, 2, '.', '');
+									}
+								}else{
+									if($add_closing_data_to_total_val !== 'Opening')
+									{
+										$dataForTotal[$add_closing_data_to_total_key] = number_format((float)$add_closing_data_to_total_val, 2, '.', '');
+									}	
+								}
+							}
+
+							foreach($purchaseData as $add_purchase_data_to_total_key => $add_purchase_data_to_total_val)
+							{
+								if($add_purchase_data_to_total_val !== 'Purchase')
+								{
+									if(isset($dataForTotal[$add_purchase_data_to_total_key])){
+
+
+									$dataForTotal[$add_purchase_data_to_total_key] = number_format((float)$dataForTotal[$add_purchase_data_to_total_key] + (float)$add_purchase_data_to_total_val, 2, '.', '');
+									}
+								}
+							}
+						$final_json_to_pass[] = $dataForTotal;
+						}elseif($final_json_val[$array_val] === 'Closing')
+						{
+							$totalData = [];
+							$salesData = [];
+							foreach($final_json_to_pass as $getTotalData)
+							{
+								foreach($getTotalData as $tk => $tv)
+								{
+									if($tk == $array_val && $tv == 'Total')
+									{
+										$totalData = $getTotalData;
+										break;
+									}
+								}
+							}
+							foreach($final_json_to_pass as $getSalesData)
+							{
+								foreach($getSalesData as $sk => $sv)
+								{
+									if($sk == $array_val && $sv == 'Sales')
+									{
+										$salesData = $getSalesData;
+										break;
+									}
+								}
+							}
+							// $totalData = $final_json_to_pass[$final_json_key - 2];
+							// $salesData = $final_json[$final_json_key - 1];
+
+							$dataForClosing = [];
+							$dataForClosing[$array_val] = 'Closing';
+
+							foreach($totalData as $add_total_data_to_get_closing_key => $add_total_data_to_get_closing_val)
+							{
+								if($add_total_data_to_get_closing_val !== 'Total')
+								{
+									$dataForClosing[$add_total_data_to_get_closing_key] = number_format((float)$add_total_data_to_get_closing_val, 2, '.', '');
+								}
+							}
+
+							foreach($salesData as $sum_sales_data_to_get_closing_key => $sum_sales_data_to_get_closing_val)
+							{
+								if($sum_sales_data_to_get_closing_val !== 'Sales')
+								{
+									if(isset($dataForClosing[$sum_sales_data_to_get_closing_key])){
+
+
+									$dataForClosing[$sum_sales_data_to_get_closing_key] = number_format((float)$dataForClosing[$sum_sales_data_to_get_closing_key] + (float)$sum_sales_data_to_get_closing_val, 2, '.', '');
+									}
+								}
+							}
+						$final_json_to_pass[] = $dataForClosing;
+						}else{							
+                        	$data = $final_json_val;
+							$final_json_to_pass[] = $data;
+						}
+					}
+
+					if(!empty($final_json_to_pass))
+					{
+						foreach($final_json_to_pass as $final_json_to_pass_key => $final_json_to_pass_val)
+						{
+							if (isset($final_json_to_pass_val[$array_val]) && $final_json_to_pass_val[$array_val] === 'Closing') {
+								// Update `previousClosing` with non-date keys
+								foreach ($final_json_to_pass_val as $prev_key => $prev_val) {
+									if (!strtotime($prev_key)) {
+										$previousClosing[$prev_key] = $prev_val;
+									}
+								}
+							}
+						}
+					}
 
                     if (++$counter == 6) {
                         break;
@@ -2837,115 +2719,8 @@ class Reports extends Controller
         return response()->json($final_json_to_pass);
     }
 
-    // public function YearlyReport(Request $request)
-    // {
-    //     $json = [];
-    //     $months = array();
-    //     $company_id = $request->company_id;
-    //     // Get the current year and month
-    //     $currentDate = Carbon::now();
-
-    //     // Determine the financial year start and end
-    //     $financialYearStart = $currentDate->month >= 4 ? $currentDate->year : $currentDate->year - 1;
-    //     $financialYearEnd = $financialYearStart + 1;
-
-    //     // Financial year months (April to March)
-    //     $months = ['04', '05', '06', '07', '08', '09', '10', '11', '12', '01', '02', '03'];
-
-    //     // Create patterns for the tables you want to match
-    //     $patterns = [];
-    //     foreach ($months as $month) {
-    //         $year = ($month >= '04') ? $financialYearStart : $financialYearEnd;
-    //         $patterns[] = "{$year}_{$month}_%";
-    //     }
-
-    //     // Build the SQL query
-    //     $query = "SHOW TABLES WHERE ";
-    //     $queryParts = [];
-    //     foreach ($patterns as $pattern) {
-    //         $queryParts[] = "Tables_in_" . DB::getDatabaseName() . " LIKE '" . $pattern . "'";
-    //     }
-    //     $query .= implode(" OR ", $queryParts);
-
-    //     // Execute the query
-    //     $tables = DB::select($query);
-
-    //     // Extract table names from the result
-    //     $tableNames = array_map(function($table) {
-    //         return array_values((array)$table)[0];
-    //     }, $tables);
-
-
-    //     if(!empty($tableNames)){
-    //         foreach($tableNames as $tab)
-    //     }
-    //     foreach ($months as $month) {
-    //         $newMonth = explode(' ', $month);
-    //         $categories = Category::where('status', 1)->get();
-    //         foreach ($categories as $category) {
-    //             $btls = Brand::where(['category_id' => $category->id])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_size"))->get(); // get unique bottle size of that category
-    //             foreach ($btls as $key2 => $btl_size) {
-    //                 $brands = Brand::where(['category_id' => $category['id'], 'btl_size' => $btl_size['btl_size']])->get(); // get brand of that category
-    //                 $openSum = 0;
-    //                 $purchaseSum = 0;
-    //                 $totalSum = 0;
-    //                 $saleSum = 0;
-    //                 $closingSum = 0;
-    //                 foreach ($brands as $key => $brand) {
-    //                     // opening section
-    //                     [$opening] = DailyOpening::where(['brand_id' => $brand['id'], 'company_id' => $company_id, ['date', 'like', '%-' . $newMonth[0] . '-' . $newMonth[1]]])
-    //                         ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-    //                         ->get();
-
-    //                     if ($opening)
-    //                         $open = $opening['qty'];
-    //                     else
-    //                         $open = 0;
-    //                     $openSum = $openSum + $open;
-    //                     //purchase section
-    //                     [$purchase] = purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id, ['invoice_date', 'like', '%-' . $newMonth[0] . '-' . $newMonth[1]]])
-    //                         ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-    //                         ->get();
-    //                     if ($purchase)
-    //                         $purchaseQty = $purchase['qty'];
-    //                     else
-    //                         $purchaseQty = 0;
-    //                     $purchaseSum = $purchaseSum + $purchaseQty;
-    //                     //total section
-    //                     $total = $purchaseQty + $open;
-    //                     if ($total)
-    //                         $totalSum = $totalSum + $total;
-
-    //                     // sales
-    //                     [$sales] = Sales::where(['brand_id' => $brand['id'], 'company_id' => $company_id, ['sale_date', 'like', '%-' . $newMonth[0] . '-' . $newMonth[1]]])
-    //                         ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-    //                         ->get();
-    //                     if ($sales)
-    //                         $saleQty = $sales['qty'];
-    //                     else
-    //                         $saleQty = 0;
-    //                     $saleSum = $saleSum + $saleQty;
-
-    //                     //total section
-    //                     $closing = $total - $saleQty;
-    //                     if ($total)
-    //                         $closingSum = $closingSum + $closing;
-    //                 }
-
-    //                 $data[$month]['Title'] = $month;
-    //                 $data[$month][$category['name'] . '-' . 'opening'] = $openSum / 1000;
-    //                 $data[$month][$category['name'] . '-' . 'purchase'] = $purchaseSum / 1000;
-    //                 $data[$month][$category['name'] . '-' . 'sale'] = $saleSum / 1000;
-    //                 $data[$month][$category['name'] . '-' . 'closing'] = $closingSum / 1000;
-    //             }
-    //         }
-    //         array_push($json, $data[$month]);
-    //     }
-    //     return response()->json($json);
-    // }
-
     protected function getFinancialYearTables()
-    {
+    { 
         // Get the current year and month
         $currentDate = Carbon::now();
 
@@ -3019,239 +2794,6 @@ class Reports extends Controller
 
         return $tableNames;
     }
-
-    // public function YearlyReport(Request $request)
-    // {
-    //     $companyId = $request->company_id;
-    //     $fromDate = $request->from_date; // Replace with $request->from_date if dynamic
-    //     $toDate = $request->to_date;   // Replace with $request->to_date if dynamic
-
-    //     // Get the financial year based on from_date
-    //     $financialYearStart = date('Y', strtotime($fromDate));
-    //     if (date('m', strtotime($fromDate)) < 4) {
-    //         $financialYearStart -= 1; // Adjust if the month is before April
-    //     }
-
-    //     // Extract month and year for dynamic calculations
-    //     $fromMonth = date('m', strtotime($fromDate));
-    //     $fromYear = date('Y', strtotime($fromDate));
-    //     $toMonth = date('m', strtotime($toDate));
-    //     $toYear = date('Y', strtotime($toDate));
-
-    //     // Get all categories
-    //     $categories = DB::table('categories')->orderBy('id', 'asc')->get(['id', 'name']);
-
-    //     $results = [];
-    //     $tempResults = []; // Temporary storage for zero filtering
-
-    //     // Loop through each month in the range
-    //     for ($year = $fromYear; $year <= $toYear; $year++) {
-    //         $startMonth = ($year === $fromYear) ? $fromMonth : 4; // April of the starting year
-    //         $endMonth = ($year === $toYear) ? $toMonth : 12; // December of the ending year
-
-    //         foreach ($categories as $category) {
-    //             $categoryId = $category->id;
-    //             $categoryName = $category->name;
-
-    //             for ($month = $startMonth; $month <= $endMonth; $month++) {
-    //                 // Format month
-    //                 $formattedMonth = sprintf('%02d', $month);
-    //                 // Determine the opening date range for the month
-    //                 $openingDate = ($month === $fromMonth) ? date('Y-m-d', strtotime("$fromYear-$formattedMonth-01")) : date('Y-m-d', strtotime("$year-$formattedMonth-01"));
-
-    //                 // Calculate Opening Stock: All credit - all debit before fromDate for this category
-    //                 $openingStock = 0;
-    //                 $openingStockTableNames = [];
-
-    //                 // Get opening stock table names
-    //                 for ($m = 4; $m <= 12; $m++) {
-    //                     $formattedOpeningMonth = sprintf('%02d', $m);
-    //                     if (Schema::hasTable("{$financialYearStart}_{$formattedOpeningMonth}_log_data")) {
-    //                         $openingStockTableNames[] = "{$financialYearStart}_{$formattedOpeningMonth}_log_data";
-    //                     }
-    //                 }
-
-    //                 $nextYear = $financialYearStart + 1;
-
-    //                 for ($m = 1; $m <= 3; $m++) {
-    //                     $formattedNextYearMonth = sprintf('%02d', $m);
-    //                     if (Schema::hasTable("{$nextYear}_{$formattedNextYearMonth}_log_data")) {
-    //                         $openingStockTableNames[] = "{$nextYear}_{$formattedNextYearMonth}_log_data";
-    //                     }
-    //                 }
-
-    //                 // Iterate through each opening stock table to calculate quantities
-    //                 foreach ($openingStockTableNames as $table) {
-    //                     $openingData = DB::table($table)
-    //                         ->where('company_id', $companyId)
-    //                         ->where('log_date', '<', $fromDate)
-    //                         ->get();
-
-    //                     foreach ($openingData as $entry) {
-    //                         $data = json_decode($entry->data, true);
-    //                         foreach ($data as $item) {
-    //                             if (isset($item['category_id'], $item['transaction_category'], $item['qty'])) {
-    //                                 $transactionCategory = $item['transaction_category'];
-    //                                 $qty = (int)$item['qty'] / 1000; // Convert ml to l
-
-    //                                 // Adjust opening stock based on credit/debit for this category
-    //                                 if ($item['category_id'] === $categoryId) {
-    //                                     if ($transactionCategory === 'credit') {
-    //                                         $openingStock += $qty;
-    //                                     } elseif ($transactionCategory === 'debit') {
-    //                                         $openingStock -= $qty;
-    //                                     }
-    //                                 }
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-
-    //                 // Calculate Purchases and Sales for the current month for this category
-    //                 $purchases = 0;
-    //                 $sales = 0;
-    //                 $purchasesTableNames = $salesTableNames = $openingStockTableNames;
-
-    //                 foreach ($purchasesTableNames as $table) {
-    //                     if (DB::getSchemaBuilder()->hasTable($table)) {
-    //                         $inventoryData = DB::table($table)
-    //                             ->where('company_id', $companyId)
-    //                             ->whereBetween('log_date', [$openingDate, $toDate])
-    //                             ->get();
-
-    //                         foreach ($inventoryData as $entry) {
-    //                             $data = json_decode($entry->data, true);
-    //                             foreach ($data as $item) {
-    //                                 if (isset($item['category_id'], $item['transaction_category'], $item['transaction_type'], $item['qty'])) {
-    //                                     $transactionCategory = $item['transaction_category'];
-    //                                     $transactionType = $item['transaction_type'];
-    //                                     $qty = (int)$item['qty'] / 1000; // Convert ml to l
-
-    //                                     // Calculate purchases for this category
-    //                                     if ($item['category_id'] === $categoryId && $transactionCategory === 'credit' && $transactionType === 'purchase' && date('Y-m', strtotime($entry->log_date)) === "$year-$formattedMonth") {
-    //                                         $purchases += $qty;
-    //                                     }
-
-    //                                     if ($item['category_id'] === $categoryId && $transactionCategory === 'debit' && $transactionType === 'purchase' && date('Y-m', strtotime($entry->log_date)) === "$year-$formattedMonth") {
-    //                                         $purchases -= $qty;
-    //                                     }
-
-    //                                     if ($item['category_id'] === $categoryId && $transactionCategory === 'credit' && $transactionType === 'opening' && date('Y-m', strtotime($entry->log_date)) === "$year-$formattedMonth") {
-    //                                         $purchases += $qty;
-    //                                     }
-
-    //                                     if ($item['category_id'] === $categoryId && $transactionCategory === 'debit' && $transactionType === 'opening' && date('Y-m', strtotime($entry->log_date)) === "$year-$formattedMonth") {
-    //                                         $purchases -= $qty;
-    //                                     }
-
-    //                                     if ($item['category_id'] === $categoryId && $transactionCategory === 'credit' && $transactionType === 'transfer' && date('Y-m', strtotime($entry->log_date)) === "$year-$formattedMonth") {
-    //                                         $purchases += $qty;
-    //                                     }
-
-    //                                     // Calculate sales for this category
-    //                                     if ($item['category_id'] === $categoryId && $transactionCategory === 'debit' && $transactionType === 'sales' && date('Y-m', strtotime($entry->log_date)) === "$year-$formattedMonth") {
-    //                                         $sales += $qty;
-    //                                     }
-
-    //                                     if ($item['category_id'] === $categoryId && $transactionCategory === 'credit' && $transactionType === 'sales' && date('Y-m', strtotime($entry->log_date)) === "$year-$formattedMonth") {
-    //                                         $sales -= $qty;
-    //                                     }
-
-    //                                     if ($item['category_id'] === $categoryId && $transactionCategory === 'debit' && $transactionType === 'transfer' && date('Y-m', strtotime($entry->log_date)) === "$year-$formattedMonth") {
-    //                                         $sales += $qty;
-    //                                     }
-    //                                 }
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-
-    //                 // Calculate Closing Stock
-    //                 $closingStock = $openingStock + $purchases - $sales;
-
-    //                 // Store results in a temporary array
-    //                 $tempResults[$formattedMonth][$categoryName] = [
-    //                     'Opening' => $openingStock,
-    //                     'Purchases' => $purchases,
-    //                     'Sales' => $sales,
-    //                     'Closing' => $closingStock,
-    //                 ];
-    //             }
-    //         }
-    //     }
-
-    //     // Prepare final results and filter out categories with all zero values
-    //     foreach ($tempResults as $month => $data) {
-    //         $result = ['Date' => date('M - Y', strtotime("$fromYear-$month-01"))];
-
-    //         foreach ($data as $categoryName => $values) {
-    //             if ($values['Opening'] > 0 || $values['Purchases'] > 0 || $values['Sales'] > 0 || $values['Closing'] > 0) {
-    //                 $result["{$categoryName} - Opening"] = $values['Opening'];
-    //                 $result["{$categoryName} - Purchase"] = $values['Purchases'];
-    //                 $result["{$categoryName} - Sales"] = $values['Sales'];
-    //                 $result["{$categoryName} - Closing"] = $values['Closing'];
-    //             }
-    //         }
-
-    //         // Add to results only if there are non-zero values
-    //         if (count($result) > 1) { // At least the Date should be present
-    //             $results[] = $result;
-    //         }
-    //     }
-
-    //     $total = [];
-    //     $all_unique_categories = [];
-
-    //     // Check if results exist
-    //     if (!empty($results[0])) {
-    //         // Collect unique categories based on keys in results[0]
-    //         foreach ($results[0] as $key => $value) {
-    //             if ($key !== 'Date') {
-    //                 $cat_name = explode(' -', $key)[0]; // Get the category name directly
-    //                 if (!in_array($cat_name, $all_unique_categories)) {
-    //                     $all_unique_categories[] = $cat_name; // Add to unique categories
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     // Initialize totals for each category
-    //     foreach ($all_unique_categories as $category) {
-    //         $opening_key = "$category - Opening";
-    //         $purchase_key = "$category - Purchase";
-    //         $sales_key = "$category - Sales";
-
-    //         // Set opening, purchase, and sales values
-    //         $total[$category] = [
-    //             'opening' => $results[0][$opening_key] ?? 0, // Default to 0 if not found
-    //             'purchase' => 0,
-    //             'sales' => 0
-    //         ];
-
-    //         // Calculate purchase and sales totals across all results
-    //         foreach ($results as $result) {
-    //             $total[$category]['purchase'] += $result[$purchase_key] ?? 0; // Add if exists
-    //             $total[$category]['sales'] += $result[$sales_key] ?? 0; // Add if exists
-    //         }
-
-    //         // Calculate closing amount
-    //         $total[$category]['closing'] = $total[$category]['opening'] + $total[$category]['purchase'] - $total[$category]['sales'];
-    //     }
-
-    //     // Flatten the totals into a final array
-    //     $final_total = [];
-    //     foreach ($total as $values) {
-    //         $final_total = array_merge($final_total, array_values($values)); // Merging values into final total
-    //     }
-
-    //     $responseData = [
-    //         'results' => $results,
-    //         'final_total' => $final_total,
-    //     ];
-        
-    //     // Return the JSON response
-    //     return response()->json($responseData);
-    // }
 
     public function YearlyReport(Request $request)
     {
@@ -3463,171 +3005,6 @@ class Reports extends Controller
         return "{$monthName} - {$year}";
     }
 
-    // public function YearlyComparisonReport(Request $request)
-    // {
-    //     $companyId = $request->input('company_id');
-    //     $currentYear = date('Y');
-    //     $currentMonth = date('m');
-
-    //     // Define the financial year
-    //     if ($currentMonth >= 4) {
-    //         // Current financial year starts in April of the current year
-    //         $financialYearStart = $currentYear;
-    //     } else {
-    //         // Current financial year starts in April of the previous year
-    //         $financialYearStart = $currentYear - 1;
-    //     }
-        
-    //     $previousFinancialYearStart = $financialYearStart - 1;
-
-    //     // Fetch category names
-    //     $categories = $this->getCategories();
-
-    //     // Get tables for both financial years with data for this company
-    //     $tables = $this->getFinancialYearTablesForComparison($companyId, $previousFinancialYearStart, $financialYearStart);
-
-    //     $lastMonthPreviousFinancialYear = '';
-    //     $firstMonthPreviousFinancialYear = '';
-    //     $firstMonthCurrentFinancialYear = '';
-
-    //     if (!empty($tables)) {
-    //         $last_month = '';
-    //         $first_month = '';
-        
-    //         foreach ($tables as $year => $months) {
-    //             if ($year == ($financialYearStart - 1)) {
-    //                 $month_keys = array_keys($months);
-    //                 $last_month = end($month_keys);
-    //                 $first_month_of_previous_year = reset($month_keys);
-    //             }
-                
-    //             if ($year == $financialYearStart) {
-    //                 $month_keys = array_keys($months);
-    //                 $first_month = reset($month_keys);
-    //             }
-    //         }
-        
-    //         // Assign the last month of the previous financial year
-    //         if ($last_month) {
-    //             $lastMonthPreviousFinancialYear = (int)$last_month;
-    //         }
-        
-    //         // Assign the last month of the previous financial year
-    //         if ($first_month_of_previous_year) {
-    //             $firstMonthPreviousFinancialYear = (int)$first_month_of_previous_year;
-    //         }
-        
-    //         if ($first_month) {
-    //             $firstMonthCurrentFinancialYear = (int)$first_month;
-    //         }
-    //     }
-
-    //     // Initialize data storage for the report
-    //     $reportData = [];
-    //     $allCategories = [];
-
-    //     // Track closing for monthly opening in the next month
-    //     $monthlyClosingByCategory = [];
-
-    //     // Process data for each financial year
-    //     foreach ($tables as $year => $monthlyTables) {
-
-    //         foreach ($monthlyTables as $month => $tableName) {
-    //             // Query data for the company in the table
-    //             $records = DB::table($tableName)
-    //                 ->where('company_id', $companyId)
-    //                 ->get();
-
-    //             // Call updated calculateMonthlyData function with month and year
-    //             $monthlyData = $this->calculateMonthlyData($records, $monthlyClosingByCategory, $categories, $month, $year, $firstMonthCurrentFinancialYear, $lastMonthPreviousFinancialYear);
-    //             // Format month name
-    //             $monthName = date('M', mktime(0, 0, 0, $month, 1)) . " - " . $year;
-
-    //             // Organize monthly data under the formatted month name
-    //             foreach ($monthlyData as $categoryName => $data) {
-    //                 $reportData[] = [
-    //                     "Date" => $monthName,
-    //                     "{$categoryName} - Opening" => $data['opening'],
-    //                     "{$categoryName} - Purchase" => $data['purchase'],
-    //                     "{$categoryName} - Sales" => $data['sales'],
-    //                     "{$categoryName} - Closing" => $data['closing'],
-    //                 ];
-
-    //                 if (!in_array($categoryName, $allCategories)) {
-    //                     $allCategories[] = $categoryName;
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     $aggregatedReportData = [];
-
-    //     foreach ($reportData as $entry) {
-    //         $date = $entry['Date'];
-
-    //         // Initialize the month entry if it doesn't exist
-    //         if (!isset($aggregatedReportData[$date])) {
-    //             $aggregatedReportData[$date] = [
-    //                 'Date' => $date,
-    //             ];
-    //         }
-
-    //         // Aggregate the quantities for each category
-    //         foreach ($entry as $key => $value) {
-    //             if ($key !== 'Date') {
-    //                 if (!isset($aggregatedReportData[$date][$key])) {
-    //                     $aggregatedReportData[$date][$key] = 0; // Initialize if not set
-    //                 }
-    //                 // Add the quantity
-    //                 $aggregatedReportData[$date][$key] += $value;
-    //             }
-    //         }
-    //     }
-
-    //     // Final report with all categories for each month
-    //     $finalReport = [];
-    //     foreach ($aggregatedReportData as $date => $data) {
-    //         // Initialize the month entry
-    //         $finalReport[$date] = ['Date' => $date];
-
-    //         // Set values for all categories, using 0 if they don't exist in the current month
-    //         foreach ($allCategories as $category) {
-    //             $finalReport[$date]["{$category} - Opening"] = $data["{$category} - Opening"] ?? 0;
-    //             $finalReport[$date]["{$category} - Purchase"] = $data["{$category} - Purchase"] ?? 0;
-    //             $finalReport[$date]["{$category} - Sales"] = $data["{$category} - Sales"] ?? 0;
-    //             $finalReport[$date]["{$category} - Closing"] = $data["{$category} - Closing"] ?? 0;
-    //         }
-    //     }
-
-    //     $orderedReport = [];
-
-    //     // Get the number of months in the previous financial year from first month to December
-    //     $totalMonths = 12;
-
-    //     // Alternate between previous and current financial years
-    //     for ($month = 1; $month <= $totalMonths; $month++) {
-    //         // Determine the month name for the previous financial year
-    //         $prevMonthName = date('M', mktime(0, 0, 0, $month, 1)) . " - " . ($previousFinancialYearStart);
-    //         // Determine the month name for the current financial year
-    //         $currentMonthName = date('M', mktime(0, 0, 0, $month, 1)) . " - " . ($financialYearStart);
-            
-    //         // Add the previous financial year data if it exists
-    //         if (isset($finalReport[$prevMonthName])) {
-    //             $orderedReport[] = $finalReport[$prevMonthName];
-    //         }
-            
-    //         // Add the current financial year data if it exists
-    //         if (isset($finalReport[$currentMonthName])) {
-    //             $orderedReport[] = $finalReport[$currentMonthName];
-    //         }
-    //     }
-
-    //     // Reindex the result array to get a numeric array instead of an associative one
-    //     $orderedReport = array_values($orderedReport);
-
-    //     return response()->json($orderedReport);
-    // }
-
     /**
      * Fetch all categories and return them as an associative array
      */
@@ -3734,157 +3111,6 @@ class Reports extends Controller
 
         return $monthlyData;
     }
-
-    // public function YearlyComparisonReport(Request $request)
-    // {
-    //     $json = [];
-    //     $months = array();
-    //     $company_id = $request->company_id;
-    //     $months = $this->getCurrentFinancialYearMonths();
-    //     foreach ($months as $month) {
-    //         $newMonth = explode(' ', $month);
-    //         $categories = Category::where('status', 1)->get();
-    //         foreach ($categories as $category) {
-    //             $btls = Brand::where(['category_id' => $category->id])->orderBy('btl_size', 'DESC')->groupBy(DB::raw("btl_si-okjnb ze"))->get(); // get unique bottle size of that category
-    //             foreach ($btls as $key2 => $btl_size) {
-    //                 $brands = Brand::where(['category_id' => $category['id'], 'btl_size' => $btl_size['btl_size']])->get(); // get brand of that category
-    //                 $openSum = 0;
-    //                 $purchaseSum = 0;
-    //                 $totalSum = 0;
-    //                 $saleSum = 0;
-    //                 $closingSum = 0;
-
-
-    //                 $openSum2 = 0;
-    //                 $purchaseSum2 = 0;
-    //                 $totalSum2 = 0;
-    //                 $saleSum2 = 0;
-    //                 $closingSum2 = 0;
-    //                 foreach ($brands as $key => $brand) {
-    //                     // current year opening section
-    //                     [$opening] = DailyOpening::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-    //                         ->whereMonth('date', $newMonth[0])
-    //                         ->whereYear('date', $newMonth[1])
-    //                         ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-    //                         ->get();
-
-    //                     if ($opening)
-    //                         $open = $opening['qty'];
-    //                     else
-    //                         $open = 0;
-    //                     $openSum = $openSum + $open;
-    //                     // current year opening section end
-    //                     //current year purchase section
-    //                     [$purchase] = purchase::where(['brand_id' => $brand['id'], 'compa4ny_id' => $company_id])
-    //                         ->whereMonth('invoice_date', $newMonth[0])
-    //                         ->whereYear('invoice_date', $newMonth[1])
-    //                         ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-    //                         ->get();
-    //                     if ($purchase)
-    //                         $purchaseQty = $purchase['qty'];
-    //                     else
-    //                         $purchaseQty = 0;
-    //                     $purchaseSum = $purchaseSum + $purchaseQty;
-    //                     //total section
-    //                     $total = $purchaseQty + $open;
-    //                     if ($total)
-    //                         $totalSum = $totalSum + $total;
-    //                     //current year purchase section end 
-
-    //                     // current year sales start
-    //                     [$sales] = Sales::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-    //                         ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-    //                         ->whereMonth('sale_date', $newMonth[0])
-    //                         ->whereYear('sale_date', $newMonth[1])
-    //                         ->get();
-    //                     if ($sales)
-    //                         $saleQty = $sales['qty'];
-    //                     else
-    //                         $saleQty = 0;
-    //                     $saleSum = $saleSum + $saleQty;
-
-    //                     //total section
-    //                     $closing = $total - $saleQty;
-    //                     if ($total)
-    //                         $closingSum = $closingSum + $closing;
-    //                     // current year sales end
-
-
-
-    //                     // last year opening section
-    //                     [$opening2] = DailyOpening::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-    //                         ->whereMonth('date', $newMonth[0])
-    //                         ->whereYear('date', $newMonth[1] - 1)
-    //                         ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-    //                         ->get();
-
-    //                     if ($opening2)
-    //                         $open2 = $opening2['qty'];
-    //                     else
-    //                         $open2 = 0;
-    //                     $openSum2 = $openSum2 + $open2;
-    //                     // last year opening section end
-    //                     //last year purchase section start 
-    //                     [$purchase2] = purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-    //                         ->whereMonth('invoice_date', $newMonth[0])
-    //                         ->whereYear('invoice_date', $newMonth[1] - 1)
-    //                         ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-    //                         ->get();
-    //                     if ($purchase2)
-    //                         $purchaseQty2 = $purchase2['qty'];
-    //                     else
-    //                         $purchaseQty2 = 0;
-    //                     $purchaseSum2 = $purchaseSum2 + $purchaseQty2;
-    //                     //total section
-    //                     $total2 = $purchaseQty2 + $open2;
-    //                     if ($total2)
-    //                         $totalSum2 = $totalSum2 + $total2;
-    //                     //last year purchase section end
-    //                     // last year sales start
-
-    //                     [$sales2] = Sales::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-    //                         ->select(DB::raw('SUM(COALESCE(qty, 0)) as qty'))
-    //                         ->whereMonth('sale_date', $newMonth[0])
-    //                         ->whereYear('sale_date', $newMonth[1] - 1)
-    //                         ->get();
-    //                     if ($sales2)
-    //                         $saleQty2 = $sales2['qty'];
-    //                     else
-    //                         $saleQty2 = 0;
-    //                     $saleSum2 = $saleSum2 + $saleQty2;
-
-    //                     //total section
-    //                     $closing2 = $total2 - $saleQty2;
-    //                     if ($total2)
-    //                         $closingSum2 = $closingSum2 + $closing2;
-    //                     // last year sales end
-    //                 }
-    //                 // current year
-    //                 $data[$month]['Title'] = $month;
-    //                 $data[$month][$category['name'] . '-' . 'opening'] = $openSum / 1000;
-    //                 $data[$month][$category['name'] . '-' . 'purchase'] = $purchaseSum / 1000;
-    //                 $data[$month][$category['name'] . '-' . 'sale'] = $saleSum / 1000;
-    //                 $data[$month][$category['name'] . '-' . 'closing'] = $closingSum / 1000;
-    //                 // last year
-    //                 $data[$newMonth[0] . $newMonth[1] - 1]['Title'] =  $newMonth[0]  . ' ' . $newMonth[1] - 1;
-    //                 $data[$newMonth[0] . $newMonth[1] - 1][$category['name'] . '-' . 'opening'] = $openSum2 / 1000;
-    //                 $data[$newMonth[0] . $newMonth[1] - 1][$category['name'] . '-' . 'purchase'] = $purchaseSum2 / 1000;
-    //                 $data[$newMonth[0] . $newMonth[1] - 1][$category['name'] . '-' . 'sale'] = $saleSum2 / 1000;
-    //                 $data[$newMonth[0] . $newMonth[1] - 1][$category['name'] . '-' . 'closing'] = $closingSum2 / 1000;
-    //                 //blank
-    //                 $data[$newMonth[0]]['Title'] = '';
-    //                 $data[$newMonth[0]][$category['name'] . '-' . 'opening'] = '';
-    //                 $data[$newMonth[0]][$category['name'] . '-' . 'purchase'] = '';
-    //                 $data[$newMonth[0]][$category['name'] . '-' . 'sale'] = '';
-    //                 $data[$newMonth[0]][$category['name'] . '-' . 'closing'] = '';
-    //             }
-    //         }
-    //         array_push($json, $data[$month]);
-    //         array_push($json, $data[$newMonth[0] . $newMonth[1] - 1]);
-    //         array_push($json, $data[$newMonth[0]]);
-    //     }
-    //     return response()->json($json);
-    // }
     
     public function getCurrentFinancialYearMonths()
     {
@@ -3964,7 +3190,7 @@ class Reports extends Controller
         
         $all_brands_and_tp_no = $this->getAllBrandsAndTpNo($all_row_data);
             
-
+        
         $zero_in_opening = [];
         $zero_in_purchase = [];
         $zero_in_sales = [];
@@ -4252,6 +3478,17 @@ class Reports extends Controller
             $posB = array_search($b, $categoryOrder);
             return $posA <=> $posB;
         });
+		
+		$openingDataTotals = $this->brandwiseFromBottleStaticTotalToBtlPeg($opening_data);
+        $purchaseDataTotals = $this->brandwiseFromBottleStaticTotalToBtlPeg($purchase_data);
+        $salesDataTotals = $this->brandwiseFromBottleStaticTotalToBtlPeg($sales_data);
+        $closingDataTotals = $this->brandwiseFromBottleStaticTotalToBtlPeg($closing_data);
+		
+        $subTotals = [];
+        $subTotals['opening'] = $openingDataTotals;
+        $subTotals['purchase'] = $purchaseDataTotals;
+        $subTotals['sales'] = $salesDataTotals;
+        $subTotals['closing'] = $closingDataTotals;
 
         return [
             'opening' => $opening_data,
@@ -4259,9 +3496,65 @@ class Reports extends Controller
             'sales' => $sales_data,
             'closing' => $closing_data,
             'quantities' => $result,
+            'subTotals' => $subTotals,
             'all_brands_and_tp_no' => $all_brands_and_tp_no
         ];
     }
+
+    private function brandwiseFromBottleStaticTotalToBtlPeg($data)
+	{
+		$returnData = [];
+		$allBtlSizes = [];
+
+		// Step 1: Gather all unique bottle sizes
+		if (!empty($data)) {
+			foreach ($data as $categoryName => $btlSizes) {
+				foreach ($btlSizes as $btl_size => $brands) {
+					$allBtlSizes[$btl_size] = true; // Collect unique bottle sizes
+				}
+			}
+		}
+
+		// Sort allBtlSizes in descending order
+		$allBtlSizes = array_keys($allBtlSizes);
+		rsort($allBtlSizes);
+
+		// Step 2: Initialize return data with all bottle sizes set to 0
+		if (!empty($data)) {
+			foreach ($data as $categoryName => $btlSizes) {
+				$returnData[$categoryName] = array_fill_keys($allBtlSizes, 0);
+
+				foreach ($btlSizes as $btl_size => $brands) {
+					foreach ($brands as $key => $qty) {
+						$returnData[$categoryName][$btl_size] += $qty;
+					}
+				}
+
+				// Sort the bottle sizes in descending order for this category
+				krsort($returnData[$categoryName]);
+			}
+		}
+
+		// Step 3: Convert quantities to bottle-peg format
+		foreach ($returnData as $categoryName => &$btlSizes) {
+			foreach ($btlSizes as $btl_size => &$qty) {
+				$peg_size = DB::table('brands')->where('btl_size', $btl_size)->where('status', 1)->first();
+
+				$get_btl_and_peg_separated = explode('.', $qty);
+
+				$btl = $get_btl_and_peg_separated[0] ?? 0;
+				$peg = !empty($get_btl_and_peg_separated[1]) ? $get_btl_and_peg_separated[1] : 0;
+
+				$qty_in_ml = ($btl * $btl_size) + ($peg * ($peg_size->peg_size ?? 0));
+
+				$qty_in_btl_peg = convertBtlPeg($qty_in_ml, $btl_size, $peg_size->peg_size ?? 0);
+
+				$qty = $qty_in_btl_peg['btl'] . '.' . $qty_in_btl_peg['peg'];
+			}
+		}
+
+		return $returnData;
+	}
 
     private function convertSizeKeysToBrandNames(&$data) {
         // Collect all size keys from the data structure
@@ -4436,7 +3729,7 @@ class Reports extends Controller
             }
         }
 
-        // Build brand_tp_data excluding tp_no with both credit and debit
+        // Build brand_tp_data excluding tp_no with both credit and debit 
         foreach ($tp_no_tracker as $brand_name => $tp_data) {
             foreach ($tp_data as $tp_no => $categories) {
                 // Exclude tp_no with both credit and debit
@@ -4545,185 +3838,6 @@ class Reports extends Controller
             }
         }
     }
-
-    // public function BrandwiseReport(Request $request)
-    // {
-    //     $json = [];
-    //     $data = [];
-    //     $subtotals = [];
-    //     $categories = Category::where(['status' => 1])->get();
-    //     $company_id = $request->company_id;
-    //     $currentDate = $request->to_date;
-
-    //     // Retrieve all unique btl_size values from the Brand table
-    //     $btlSizes = Brand::distinct()->pluck('btl_size')->toArray();
-
-
-    //     foreach ($categories as $category) {
-    //         $cat_name = $category->name;
-    //         $btls = Brand::where(['category_id' => $category->id])->get();
-    //         //total
-    //         $subtotalOpening = 0;
-    //         $subtotalPurchase = 0;
-    //         $subtotalSales     = 0;
-    //         $subtotalClosing = 0;
-    //         $openSum = 0;
-    //         $open = 0;
-    //         $purchaseSum = 0;
-    //         $totalSum = 0;
-    //         $saleSum = 0;
-    //         $closingSum = 0;
-    //         foreach ($btls as $key2 => $brand) {
-    //             $brand_name = $brand['name'];
-    //             $btl_size = $brand['btl_size'];
-
-
-    //             // opening section
-    //             $opening = DailyOpening::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-    //                 ->whereDate('date', $currentDate)
-    //                 ->select(DB::raw('COALESCE(qty, 0) as qty'))
-    //                 ->first();
-    //             if ($opening)
-    //                 $open = $opening['qty'];
-    //             else
-    //                 $open = 0;
-    //             $openSum = $openSum + $open;
-
-    //             // purchase section
-    //             $purchase = Purchase::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-    //                 ->whereDate('invoice_date', $currentDate)
-
-    //                 ->select(DB::raw('COALESCE(qty, 0) as qty'))
-    //                 ->first();
-    //             if ($purchase)
-    //                 $purchaseQty = $purchase['qty'];
-    //             else
-    //                 $purchaseQty = 0;
-    //             $purchaseSum = $purchaseSum + $purchaseQty;
-
-    //             $total = $purchaseQty + $open;
-    //             if ($total)
-    //                 $totalSum = $totalSum + $total;
-
-    //             // sales
-    //             $sales = Sales::where(['brand_id' => $brand['id'], 'company_id' => $company_id])
-    //                 ->whereDate('sale_date', $currentDate)
-
-    //                 ->select(DB::raw('COALESCE(qty, 0) as qty'))
-    //                 ->first();
-    //             if ($sales)
-    //                 $saleQty = $sales['qty'];
-    //             else
-    //                 $saleQty = 0;
-    //             $saleSum = $saleSum + $saleQty;
-
-    //             // total section
-    //             $closing = $total - $saleQty;
-    //             if ($total)
-    //                 $closingSum = $closingSum + $closing;
-
-
-    //             $open_btl = convertBtlPeg($open, $brand['btl_size'], $brand['peg_size']);
-    //             // total calculation
-    //             $purchase_btl = convertBtlPeg($purchaseQty, $brand['btl_size'], $brand['peg_size']);
-    //             $sale_btl = convertBtlPeg($saleQty, $brand['btl_size'], $brand['peg_size']);
-    //             $closing_btl = convertBtlPeg($closing, $brand['btl_size'], $brand['peg_size']);
-
-    //             $categoryData = [
-    //                 'Category' => $cat_name,
-    //                 'Brand Name' => $brand_name,
-    //                 'TPNo' => '',
-    //             ];
-
-    //             // Add btl_size data to the categoryData array
-    //             foreach ($btlSizes as $size) {
-    //                 if ($size == $btl_size) {
-    //                     $categoryData['opening-' . $size] = $open_btl['btl'] . '.' . $open_btl['peg'];
-    //                 } else {
-    //                     $categoryData['opening-' . $size] = '';
-    //                 }
-    //             }
-    //             foreach ($btlSizes as $size) {
-    //                 if ($size == $btl_size) {
-    //                     $categoryData['purchase-' . $size] = $purchase_btl['btl'] . '.' . $purchase_btl['peg'];
-    //                 } else {
-    //                     $categoryData['purchase-' . $size] = '';
-    //                 }
-    //             }
-    //             foreach ($btlSizes as $size) {
-    //                 if ($size == $btl_size) {
-    //                     $categoryData['sales-' . $size] = $sale_btl['btl'] . '.' . $sale_btl['peg'];
-    //                 } else {
-    //                     $categoryData['sales-' . $size] = '';
-    //                 }
-    //             }
-    //             foreach ($btlSizes as $size) {
-    //                 if ($size == $btl_size) {
-    //                     $categoryData['closingstock-' . $size] = $closing_btl['btl'] . '.' . $closing_btl['peg'];
-    //                 } else {
-    //                     $categoryData['closingstock-' . $size] = '';
-    //                 }
-    //             }
-
-    //             $data[] = $categoryData;
-    //         }
-
-    //         // Calculate subtotals for each btl_size within the category
-    //         $categorySubtotal = [
-    //             'Category' => $cat_name,
-    //             'Brand Name' => 'SUBTOTAL',
-    //             'TPNo' => '',
-    //         ];
-
-    //         // total calculation
-    //         $c_open = convertBtlPeg($openSum, $brand['btl_size'], $brand['peg_size']);
-    //         $c_purchase = convertBtlPeg($purchaseSum, $brand['btl_size'], $brand['peg_size']);
-    //         $c_sale = convertBtlPeg($saleSum, $brand['btl_size'], $brand['peg_size']);
-    //         $c_closing = convertBtlPeg($closingSum, $brand['btl_size'], $brand['peg_size']);
-
-    //         $categoryData = [
-    //             'Category' => $cat_name,
-    //             'Brand Name' => $brand_name,
-    //             'TPNo' => '',
-    //         ];
-
-    //         // Add btl_size data to the categoryData array
-    //         foreach ($btlSizes as $size) {
-    //             if ($size == $btl_size) {
-    //                 $categorySubtotal['opening-' . $size] = $c_open['btl'] . '.' . $c_open['peg'];
-    //             } else {
-    //                 $categorySubtotal['opening-' . $size] = '';
-    //             }
-    //         }
-    //         foreach ($btlSizes as $size) {
-    //             if ($size == $btl_size) {
-    //                 $categorySubtotal['purchase-' . $size] = $c_purchase['btl'] . '.' . $c_purchase['peg'];
-    //             } else {
-    //                 $categorySubtotal['purchase-' . $size] = '';
-    //             }
-    //         }
-    //         foreach ($btlSizes as $size) {
-    //             if ($size == $btl_size) {
-    //                 $categorySubtotal['sales-' . $size] = $c_sale['btl'] . '.' . $c_sale['peg'];
-    //             } else {
-    //                 $categorySubtotal['sales-' . $size] = '';
-    //             }
-    //         }
-    //         foreach ($btlSizes as $size) {
-    //             if ($size == $btl_size) {
-    //                 $categorySubtotal['closingstock-' . $size] = $c_closing['btl'] . '.' . $c_closing['peg'];
-    //             } else {
-    //                 $categorySubtotal['closingstock-' . $size] = '';
-    //             }
-    //         }
-
-    //         $data[] = $categorySubtotal;
-    //     }
-
-    //     $json = $data;
-
-    //     return response()->json($json);
-    // }
 
     public function YearlyComparisonReport(Request $request)
     {
@@ -4863,6 +3977,22 @@ class Reports extends Controller
         array_push($final_data_with_parent_category, $currentYearTotal);
         array_push($final_data_with_parent_category, $previousYearTotal);
         
+        if(!empty($final_data_with_parent_category))
+        {
+            foreach($final_data_with_parent_category as $key => $value)
+            {
+                if(!empty($value))
+                {
+                    foreach($value as $qtyKey => $qtyValue)
+                    {
+                        if($qtyKey !== 'date')
+                        {
+                            $final_data_with_parent_category[$key][$qtyKey] = $qtyValue/1000;
+                        }
+                    }
+                }
+            }
+        }
         return response()->json($final_data_with_parent_category);
     }
 

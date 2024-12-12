@@ -24,6 +24,7 @@ class User extends Authenticatable
 		'email',
 		'mobile',
 		'password',
+        'raw_password',
 		'read',
 		'write_module',
 		'write',

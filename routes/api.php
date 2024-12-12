@@ -55,6 +55,7 @@ Route::group(['middleware' => ('auth:sanctum')], function () {
     Route::get('/getTypeOptions', [Api::class, 'getTypeOptions']);
     Route::get('/getSales', [Api::class, 'getSales']);
     Route::get('/getRecipe', [Api::class, 'getRecipe']);
+    Route::post('/ValidateRecipeName', [Api::class, 'ValidateRecipeName']);
     
     
     //post methods
