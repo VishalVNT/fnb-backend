@@ -30,6 +30,11 @@ function getBtlPeg($brand_id, $qty)
 			$qty = $qty - $brandSize[0]['peg_size'];
 			$peg++;
 		}
+
+		if($qty > $brandSize[0]['peg_size']/2)
+		{
+			$peg++;
+		}
 		$formattedPeg = sprintf('%02d', $peg);
 		return array('btl' => $btl, 'peg' => $formattedPeg, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size']);
 	}
@@ -83,6 +88,11 @@ function convertBtlPeg($qty, $brandSize, $peg_size)
 		}
 		while ($total_q >= $peg_size) {
 			$total_q = $total_q - $peg_size;
+			$peg++;
+		}
+
+		if($total_q > $peg_size/2)
+		{
 			$peg++;
 		}
 

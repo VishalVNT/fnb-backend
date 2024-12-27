@@ -612,6 +612,7 @@ class Api extends Controller
             'name' => 'required|string',
             'short_name' => 'required|string',
             'btl_size' => 'required',
+            'actual_btl_size' => 'required',
             'peg_size' => 'required',
             // 'code' => 'required',
         ]);
@@ -619,6 +620,7 @@ class Api extends Controller
         if ($request->isUpdate == 1) {
             $data['name'] = strtoupper($data['name']);
             $data['short_name'] = strtoupper($data['short_name']);
+            $data['no_peg'] = $data['actual_btl_size']/$data['peg_size'];
             if (Brand::where('id', $request->id)->update($data))
                 $isSaved = true;
             $data_log = [
@@ -634,6 +636,7 @@ class Api extends Controller
             $data['subcategory_id'] = $request->type_id;
             $data['name'] = strtoupper($data['name']);
             $data['short_name'] = strtoupper($data['short_name']);
+            $data['no_peg'] = $data['actual_btl_size']/$data['peg_size'];
             $data['created_by'] = $request->user()->id;
             $brand = new Brand($data);
             if ($brand->save())
@@ -682,6 +685,8 @@ class Api extends Controller
                     $data['short_name'] = $dataArr['short_name'];
                     $data['btl_size'] = $dataArr['btl_size'];
                     $data['peg_size'] = $dataArr['peg_size'];
+                    $data['actual_btl_size'] = floor($dataArr['btl_size']/$dataArr['peg_size']);
+                    $data['no_peg'] = $data['actual_btl_size']/$data['peg_size'];
                     $data['created_by'] = $request->user()->id;
     
                     $brand = new Brand($data);
@@ -829,9 +834,9 @@ class Api extends Controller
         $log_data_table_name = $year . '_' . $month . '_log_data';
 
         foreach ($brands as $key => $brand) {
-            $brandSize = Brand::select('id', 'name','btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
+            $brandSize = Brand::select('id', 'name','btl_size', 'actual_btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
             if (isset($brandSize)) {
-                $MlSize = ($brandSize[0]['btl_size'] * intval($no_btl[$key])) + ($brandSize[0]['peg_size'] * intval($no_peg[$key]));
+                $MlSize = ($brandSize[0]['actual_btl_size'] * intval($no_btl[$key])) + ($brandSize[0]['peg_size'] * intval($no_peg[$key]));
                 $count = DailyOpening::where(['company_id' => $request->company_id,  'brand_id' => $brand, 'status' => 1])->get()->count();
                 if ($count > 0) {
                     // stock old quantity
@@ -1077,11 +1082,11 @@ class Api extends Controller
         $isSaved = false;
         $total = 0;
         foreach ($brands as $key => $brand) {
-            $brandSize = Brand::select('btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
+            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
             if (isset($brandSize)) {
-                $MlStore = ($brandSize[0]['btl_size'] * intval($store_btl[$key])) + ($brandSize[0]['peg_size'] * intval($store_peg[$key]));
-                $MlBar1 = ($brandSize[0]['btl_size'] * intval($bar1_btl[$key])) + ($brandSize[0]['peg_size'] * intval($bar1_peg[$key]));
-                $MlBar2 = ($brandSize[0]['btl_size'] * intval($bar2_btl[$key])) + ($brandSize[0]['peg_size'] * intval($bar2_peg[$key]));
+                $MlStore = ($brandSize[0]['actual_btl_size'] * intval($store_btl[$key])) + ($brandSize[0]['peg_size'] * intval($store_peg[$key]));
+                $MlBar1 = ($brandSize[0]['actual_btl_size'] * intval($bar1_btl[$key])) + ($brandSize[0]['peg_size'] * intval($bar1_peg[$key]));
+                $MlBar2 = ($brandSize[0]['actual_btl_size'] * intval($bar2_btl[$key])) + ($brandSize[0]['peg_size'] * intval($bar2_peg[$key]));
                 $MlSize = $MlStore + $MlBar1 + $MlBar2;
                 $count = physical_history::where(['company_id' => $request->company_id,  'brand_id' => $brand])->whereDate('date', '=', $request->physicalDate)->get()->count();
                 if ($count == 0) {
@@ -1319,8 +1324,8 @@ class Api extends Controller
                     if (($servingSize[$key]) > 0) {
                         $MlSize = ($servingSize[$key] * $no_btl[$key]);
                     } else {
-                        $brandSize = Brand::select('btl_size', 'peg_size', 'id', 'name', 'category_id')->where('id', $brand)->get();
-                        $MlSize = ($brandSize[0]['btl_size'] * $no_btl[$key]) + ($brandSize[0]['peg_size'] * $no_peg[$key]);
+                        $brandSize = Brand::select('btl_size', 'actual_btl_size', 'peg_size', 'id', 'name', 'category_id')->where('id', $brand)->get();
+                        $MlSize = ($brandSize[0]['actual_btl_size'] * $no_btl[$key]) + ($brandSize[0]['peg_size'] * $no_peg[$key]);
                     }
                     if ($stock[0]['qty'] >= $MlSize) {
                         $data['sale_price'] = ($no_btl[$key] * $stock[0]['btl_selling_price']) + ($no_peg[$key] * $stock[0]['peg_selling_price']);
@@ -1441,7 +1446,7 @@ class Api extends Controller
                     foreach ($brands as $brand) {
                         $stocks = Stock::select('id', 'btl_selling_price', 'peg_selling_price','qty')->where(['company_id' => $data['company_id'], 'brand_id' => $brand['brand_id']])->get();
                         if (count($stocks) > 0) {
-                            [$peg_size] = Brand::select('peg_size', 'btl_size', 'id', 'name', 'category_id')->where('id', $brand['brand_id'])->get();
+                            [$peg_size] = Brand::select('peg_size', 'btl_size', 'actual_btl_size', 'id', 'name', 'category_id')->where('id', $brand['brand_id'])->get();
                             $data['qty'] = $brand['serving_size'] * $sale_qty;
                             $qty = $data['qty'];
                             if($stocks[0]['qty'] >= $qty){
@@ -2459,8 +2464,8 @@ class Api extends Controller
                 $data['brand_id'] = $item;
                 $data['no_btl'] = $nobtl[$key];
                 $data['mrp'] = $mrp[$key];
-                $brandSize = Brand::select('btl_size', 'category_id', 'name', 'peg_size')->where('id', $data['brand_id'])->get();
-                $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
+                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id', 'name', 'peg_size')->where('id', $data['brand_id'])->get();
+                $MlSize = ($brandSize[0]['actual_btl_size'] * $data['no_btl']);
                 $data['qty'] = $MlSize;
                 $data['category_id'] = $brandSize[0]['category_id'];
                 $save = purchase::create($data);
@@ -2668,8 +2673,8 @@ class Api extends Controller
             $data['brand_id'] = $item;
             $data['no_btl'] = $nobtl[$key];
             $data['mrp'] = $mrp[$key];
-            $brandSize = Brand::select('btl_size', 'category_id', 'id', 'name', 'btl_size', 'peg_size')->where('id', $data['brand_id'])->get();
-            $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
+            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id', 'id', 'name', 'btl_size', 'peg_size')->where('id', $data['brand_id'])->get();
+            $MlSize = ($brandSize[0]['actual_btl_size'] * $data['no_btl']);
             $data['qty'] = $MlSize;
             $data['category_id'] = $brandSize[0]['category_id'];
             $purchaseId = $p_Id[$key];
@@ -4010,7 +4015,7 @@ class Api extends Controller
                                         $data_for_log_data['category_short_name'] = $category_details->short_name;
                                         $data_for_log_data['btl_size'] = $brandDetailsForCredit->btl_size;
                                         $data_for_log_data['peg_size'] = $brandDetailsForCredit->peg_size;
-                                        $data_for_log_data['qty'] = $MlSize;
+                                        $data_for_log_data['qty'] = $Sales->qty;
                                         $data_for_log_data['purchase_price'] = NULL;
                                         $data_for_log_data['vendor_id'] = NULL;
                                         $data_for_log_data['vendor_name'] = NULL;
@@ -4223,9 +4228,9 @@ class Api extends Controller
                     }
                 }else{
                     if($p_Id[$key] > 0){
-                        $brandSize = Brand::select('btl_size', 'peg_size', 'id', 'name', 'category_id')->where('id', $brand)->first();
+                        $brandSize = Brand::select('btl_size', 'actual_btl_size', 'peg_size', 'id', 'name', 'category_id')->where('id', $brand)->first();
                         if ($brandSize) {
-                            $btl = $brandSize['btl_size'] * $no_btl[$key];
+                            $btl = $brandSize['actual_btl_size'] * $no_btl[$key];
                             $peg = $brandSize['peg_size'] * $no_peg[$key];
                             $qty = $btl + $peg;
                         }
@@ -4438,8 +4443,8 @@ class Api extends Controller
                         if (!empty($servingSize[$key]) && $servingSize[$key] > 0) {
                             $MlSize = ($servingSize[$key] * $no_btl[$key]);
                         } else {
-                            $brandSize = Brand::select('btl_size', 'peg_size', 'id', 'name', 'category_id')->where('id', $brand)->get();
-                            $MlSize = ($brandSize[0]['btl_size'] * $no_btl[$key]) + ($brandSize[0]['peg_size'] * $no_peg[$key]);
+                            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'peg_size', 'id', 'name', 'category_id')->where('id', $brand)->get();
+                            $MlSize = ($brandSize[0]['actual_btl_size'] * $no_btl[$key]) + ($brandSize[0]['peg_size'] * $no_peg[$key]);
                         }
                         if ($stock[0]['qty'] >= $MlSize) {
                             $sales_data['sale_price'] = ($no_btl[$key] * $stock[0]['btl_selling_price']) + ($no_peg[$key] * $stock[0]['peg_selling_price']);
@@ -4833,10 +4838,10 @@ class Api extends Controller
             $peg = intval($total[1]);
             $data['company_id'] = $company_id;
             //$data['branch_id'] = $branch_id;
-            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size', 'name')->where([['name', 'like', '%' . $brandName . '%']])->get();
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'actual_btl_size', 'peg_size', 'name')->where([['name', 'like', '%' . $brandName . '%']])->get();
             if (count($brandSize) > 0) {
                 $count = Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id'], 'status' => 1])->get()->count();
-                $MlSize = ($brandSize[0]['btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
+                $MlSize = ($brandSize[0]['actual_btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
                 $data['category_id'] = $brandSize[0]['category_id'];
                 $data['brand_id'] = $brandSize[0]['id'];
 
@@ -5077,10 +5082,10 @@ class Api extends Controller
             $peg = intval($total[1]);
             $data['company_id'] = $company_id;
             //$data['branch_id'] = $branch_id;
-            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%']])->get();
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'actual_btl_size', 'peg_size')->where([['name', 'like', '%' . $brandName . '%']])->get();
             if (count($brandSize) > 0) {
                 $count = Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id']])->get()->count();
-                $MlSize = ($brandSize[0]['btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
+                $MlSize = ($brandSize[0]['actual_btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
                 $data['category_id'] = $brandSize[0]['category_id'];
                 $data['brand_id'] = $brandSize[0]['id'];
                 $data['qty'] = $MlSize;
@@ -5231,7 +5236,7 @@ class Api extends Controller
             $data['vendor_id'] = $supplier[0]['id'];
             $data['company_id'] = $company_id;
             
-            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'peg_size', 'name')->where([['name', 'like', '%' . $brandName . '%']])->get();
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'actual_btl_size', 'peg_size', 'name')->where([['name', 'like', '%' . $brandName . '%']])->get();
             
             if (count($brandSize) < 1) {
                 $dataArr['reason'] = 'Brand Not Found';
@@ -5257,7 +5262,7 @@ class Api extends Controller
             $data['category_id'] = $brandSize[0]['category_id'];
             $data['brand_id'] = $brandSize[0]['id'];
             $data['no_btl'] = $btl; // number of bottles
-            $MlSize = ($brandSize[0]['btl_size'] * $data['no_btl']);
+            $MlSize = ($brandSize[0]['actual_btl_size'] * $data['no_btl']);
             $data['qty'] = $MlSize;
             
             $save = Purchase::create($data);
@@ -5462,7 +5467,7 @@ class Api extends Controller
                     $data['category_id'] = $brand['category_id'];
                     $data['brand_id'] = $brand['brand_id'];
                     $data['sale_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
-                    $peg_size = Brand::select('peg_size', 'btl_size', 'id', 'name', 'category_id')->where(['id' => $brand_id])->get();
+                    $peg_size = Brand::select('peg_size', 'btl_size', 'actual_btl_size', 'id', 'name', 'category_id')->where(['id' => $brand_id])->get();
                     $stock = Stock::select('id', 'qty', 'btl_selling_price', 'peg_selling_price')->where(['company_id' => $data['company_id'], 'brand_id' => $brand_id])->first();
                     
                     if(!empty($stock) && $stock->qty){
@@ -5896,7 +5901,7 @@ class Api extends Controller
                                 {
                                     $data['sale_price'] = ($saleAr1 * $stock->btl_selling_price) + ($saleAr2 * $stock->peg_selling_price);
             
-                                    $MlSize = ($peg_size[0]['btl_size'] * $saleAr1) + ($peg_size[0]['peg_size'] * $saleAr2);
+                                    $MlSize = ($peg_size[0]['actual_btl_size'] * $saleAr1) + ($peg_size[0]['peg_size'] * $saleAr2);
                                     $data['qty'] = $MlSize;
                                     $data['sales_main_id'] = $SalesMain->id;
                                     $data['sales_type'] = 1;
@@ -5990,7 +5995,7 @@ class Api extends Controller
                                 }
                                 if ($dataAr['nc'] > 0) {
                                     $data['sale_price'] = ($nc1 * $stock->btl_selling_price) + ($nc2 * $stock->peg_selling_price);
-                                    $MlSize1 = ($peg_size[0]['btl_size'] * $nc1) + ($peg_size[0]['peg_size'] * $nc2);
+                                    $MlSize1 = ($peg_size[0]['actual_btl_size'] * $nc1) + ($peg_size[0]['peg_size'] * $nc2);
                                     $data['qty'] = $MlSize1;
                                     $data['sales_type'] = 2;
                                     $data['no_btl'] = $nc1;
@@ -6084,7 +6089,7 @@ class Api extends Controller
                                 }
                                 if ($dataAr['banquet'] > 0) {
                                     $data['sale_price'] = ($banAr1 * $stock->btl_selling_price) + ($banAr2 * $stock->peg_selling_price);
-                                    $MlSize2 = ($peg_size[0]['btl_size'] * $banAr1) + ($peg_size[0]['peg_size'] * $banAr2);
+                                    $MlSize2 = ($peg_size[0]['actual_btl_size'] * $banAr1) + ($peg_size[0]['peg_size'] * $banAr2);
                                     $data['qty'] = $MlSize2;
                                     $data['sales_type'] = 3;
                                     $data['no_btl'] = $banAr1;
@@ -6179,7 +6184,7 @@ class Api extends Controller
                                 }
                                 if ($dataAr['cocktail'] > 0) {
                                     $data['sale_price'] = ($spoAr1 * $stock->btl_selling_price) + ($spoAr2 * $stock->peg_selling_price);
-                                    $MlSize3 = ($peg_size[0]['btl_size'] * $spoAr1) + ($peg_size[0]['peg_size'] * $spoAr2);
+                                    $MlSize3 = ($peg_size[0]['actual_btl_size'] * $spoAr1) + ($peg_size[0]['peg_size'] * $spoAr2);
                                     $data['qty'] = $MlSize3;
                                     $data['sales_type'] = 4;
                                     $data['no_btl'] = $spoAr1;
@@ -6479,7 +6484,7 @@ class Api extends Controller
                         $value['recipe_code'] = $recipe_name->recipe_code;
                         $value['brand_id'] = $recipe_name->recipe_code;
                     }
-            
+             
                     // calculate glass
                     $parameters_for_glass = Recipe::where('recipes.id',$value['recipe_id'])->join('brands','brands.id','recipes.brand_id')->select('peg_size','btl_size','serving_size')->first();
 
@@ -6763,8 +6768,8 @@ class Api extends Controller
 
         foreach ($brand as $key => $item) {
             $data['brand_id'] = $item;
-            $brandSize = Brand::select('btl_size', 'category_id', 'id', 'peg_size', 'name')->where('id', $data['brand_id'])->get()->first();
-            $MlSize = ($brandSize['btl_size'] * $nobtl[$key]);
+            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id', 'id', 'peg_size', 'name')->where('id', $data['brand_id'])->get()->first();
+            $MlSize = ($brandSize['actual_btl_size'] * $nobtl[$key]);
             // if (Stock::where(['company_id' => $data['company_id'], 'brand_id' => $data['brand_id'], ['qty', '>', $MlSize]])->get()->count() > 0) {
                 $data['qty'] = $MlSize;
                 $data['btl'] = $nobtl[$key];
@@ -7362,8 +7367,8 @@ class Api extends Controller
                     if($transactionData->transaction_type == strtolower($request->transactionType)){
                         if(strtolower($request->transactionType) === 'out'){
 
-                            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                            $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                            $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
 
                             Stock::where('company_id', $request->company_id)->where('brand_id', $request->brand_id)->orderBy('id', 'desc')->increment('qty', $transactionData->qty);
                             Stock::where('company_id', $request->company_to_id)->where('brand_id', $request->brand_id)->orderBy('id', 'desc')->decrement('qty', $transactionData->qty);
@@ -7384,8 +7389,8 @@ class Api extends Controller
                                 ], 401);
                             }
                         }else{
-                            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                            $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                            $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
 
                             Stock::where('company_id', $request->company_id)->where('brand_id', $request->brand_id)->orderBy('id', 'desc')->decrement('qty', $transactionData->qty);
                             Stock::where('company_id', $request->company_to_id)->where('brand_id', $request->brand_id)->orderBy('id', 'desc')->increment('qty', $transactionData->qty);
@@ -7408,8 +7413,8 @@ class Api extends Controller
                     }else{
                         if(strtolower($request->transactionType) === 'out'){
 
-                            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                            $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                            $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
 
                             Stock::where('company_id', $request->company_id)->where('brand_id', $request->brand_id)->orderBy('id', 'desc')->decrement('qty', $transactionData->qty);
                             Stock::where('company_id', $request->company_to_id)->where('brand_id', $request->brand_id)->orderBy('id', 'desc')->increment('qty', $transactionData->qty);
@@ -7430,8 +7435,8 @@ class Api extends Controller
                                 ], 401);
                             }
                         }else{
-                            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                            $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                            $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
 
                             Stock::where('company_id', $request->company_id)->where('brand_id', $request->brand_id)->orderBy('id', 'desc')->increment('qty', $transactionData->qty);
                             Stock::where('company_id', $request->company_to_id)->where('brand_id', $request->brand_id)->orderBy('id', 'desc')->decrement('qty', $transactionData->qty);
@@ -7457,8 +7462,8 @@ class Api extends Controller
                     if($transactionData->transaction_type == strtolower($request->transactionType)){
                         if(strtolower($request->transactionType) === 'out'){
 
-                            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                            $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                            $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
 
                             Stock::where('company_id', $request->company_id)->where('brand_id', $transactionData->brand_id)->orderBy('id', 'desc')->increment('qty', $transactionData->qty);
                             Stock::where('company_id', $request->company_to_id)->where('brand_id', $transactionData->brand_id)->orderBy('id', 'desc')->decrement('qty', $transactionData->qty);
@@ -7479,8 +7484,8 @@ class Api extends Controller
                                 ], 401);
                             }
                         }else{
-                            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                            $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                            $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
 
                             Stock::where('company_id', $request->company_id)->where('brand_id', $transactionData->brand_id)->orderBy('id', 'desc')->decrement('qty', $transactionData->qty);
                             Stock::where('company_id', $request->company_to_id)->where('brand_id', $transactionData->brand_id)->orderBy('id', 'desc')->increment('qty', $transactionData->qty);
@@ -7503,8 +7508,8 @@ class Api extends Controller
                     }else{
                         if(strtolower($request->transactionType) === 'out'){
 
-                            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                            $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                            $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
 
                             Stock::where('company_id', $request->company_id)->where('brand_id', $transactionData->brand_id)->orderBy('id', 'desc')->decrement('qty', $transactionData->qty);
                             Stock::where('company_id', $request->company_to_id)->where('brand_id', $transactionData->brand_id)->orderBy('id', 'desc')->increment('qty', $transactionData->qty);
@@ -7525,8 +7530,8 @@ class Api extends Controller
                                 ], 401);
                             }
                         }else{
-                            $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                            $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                            $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                            $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
 
                             Stock::where('company_id', $request->company_id)->where('brand_id', $transactionData->brand_id)->orderBy('id', 'desc')->increment('qty', $transactionData->qty);
                             Stock::where('company_id', $request->company_to_id)->where('brand_id', $transactionData->brand_id)->orderBy('id', 'desc')->decrement('qty', $transactionData->qty);
@@ -7557,8 +7562,8 @@ class Api extends Controller
                         if($transactionData->transaction_type == strtolower($request->transactionType)){
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -7579,8 +7584,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
@@ -7603,8 +7608,8 @@ class Api extends Controller
                         }else{
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
@@ -7625,8 +7630,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -7652,8 +7657,8 @@ class Api extends Controller
                         if($transactionData->transaction_type == strtolower($request->transactionType)){
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -7674,8 +7679,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -7698,8 +7703,8 @@ class Api extends Controller
                         }else{
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -7720,8 +7725,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -7751,8 +7756,8 @@ class Api extends Controller
                         if($transactionData->transaction_type == strtolower($request->transactionType)){
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -7773,8 +7778,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                 
@@ -7784,8 +7789,8 @@ class Api extends Controller
                         }else{
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                 
@@ -7801,8 +7806,8 @@ class Api extends Controller
                                 Transaction::where('id', $request->id)->update(['qty' => $MlSize, 'company_to_id' => $request->company_to_id, 'transaction_type' => strtolower($request->transactionType) , 'btl' => $request->nobtl, 'date' => date('Y-m-d', strtotime($request->date))]);
                                 
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -7828,8 +7833,8 @@ class Api extends Controller
                         if($transactionData->transaction_type == strtolower($request->transactionType)){
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -7850,8 +7855,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                 Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -7874,8 +7879,8 @@ class Api extends Controller
                         }else{
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                 Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -7896,8 +7901,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -7928,8 +7933,8 @@ class Api extends Controller
                             if($transactionData->transaction_type == strtolower($request->transactionType)){
                                 if(strtolower($request->transactionType) === 'out'){
         
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -7950,8 +7955,8 @@ class Api extends Controller
                                         ], 401);
                                     }
                                 }else{
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                     
@@ -7961,8 +7966,8 @@ class Api extends Controller
                             }else{
                                 if(strtolower($request->transactionType) === 'out'){
         
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                     
@@ -7979,8 +7984,8 @@ class Api extends Controller
                                     Transaction::where('id', $request->id)->update(['qty' => $MlSize,  'company_to_id' => 0, 'new_company_name' => $request->company_to_id, 'transaction_type' => strtolower($request->transactionType) , 'btl' => $request->nobtl, 'date' => date('Y-m-d', strtotime($request->date))]);
                                     
                                 }else{
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -8006,8 +8011,8 @@ class Api extends Controller
                             if($transactionData->transaction_type == strtolower($request->transactionType)){
                                 if(strtolower($request->transactionType) === 'out'){
         
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -8028,8 +8033,8 @@ class Api extends Controller
                                         ], 401);
                                     }
                                 }else{
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -8052,8 +8057,8 @@ class Api extends Controller
                             }else{
                                 if(strtolower($request->transactionType) === 'out'){
         
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -8074,8 +8079,8 @@ class Api extends Controller
                                         ], 401);
                                     }
                                 }else{
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -8103,8 +8108,8 @@ class Api extends Controller
                             if($transactionData->transaction_type == strtolower($request->transactionType)){
                                 if(strtolower($request->transactionType) === 'out'){
         
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -8125,8 +8130,8 @@ class Api extends Controller
                                         ], 401);
                                     }
                                 }else{
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                     
@@ -8136,8 +8141,8 @@ class Api extends Controller
                             }else{
                                 if(strtolower($request->transactionType) === 'out'){
         
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                     
@@ -8154,8 +8159,8 @@ class Api extends Controller
                                     Transaction::where('id', $request->id)->update(['qty' => $MlSize,  'company_to_id' => 0, 'new_company_name' => $request->company_to_id, 'transaction_type' => strtolower($request->transactionType) , 'btl' => $request->nobtl, 'date' => date('Y-m-d', strtotime($request->date))]);
                                     
                                 }else{
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -8181,8 +8186,8 @@ class Api extends Controller
                             if($transactionData->transaction_type == strtolower($request->transactionType)){
                                 if(strtolower($request->transactionType) === 'out'){
         
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -8203,8 +8208,8 @@ class Api extends Controller
                                         ], 401);
                                     }
                                 }else{
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -8227,8 +8232,8 @@ class Api extends Controller
                             }else{
                                 if(strtolower($request->transactionType) === 'out'){
         
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -8249,8 +8254,8 @@ class Api extends Controller
                                         ], 401);
                                     }
                                 }else{
-                                    $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                    $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                    $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                    $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
         
                                     Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                     Stock::where('company_id', 0)->where('company_name_for_transfer', $transactionData->new_company_name)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -8281,8 +8286,8 @@ class Api extends Controller
                         if($transactionData->transaction_type == strtolower($request->transactionType)){
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -8303,8 +8308,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                 
@@ -8314,8 +8319,8 @@ class Api extends Controller
                         }else{
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
                                 
@@ -8332,8 +8337,8 @@ class Api extends Controller
                                 Transaction::where('id', $request->id)->update(['qty' => $MlSize,  'company_to_id' => 0, 'new_company_name' => $request->company_to_id, 'transaction_type' => strtolower($request->transactionType) , 'btl' => $request->nobtl, 'date' => date('Y-m-d', strtotime($request->date))]);
                                 
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $request->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $request->brand_id)->decrement('qty', $transactionData->qty);
@@ -8359,8 +8364,8 @@ class Api extends Controller
                         if($transactionData->transaction_type == strtolower($request->transactionType)){
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -8381,8 +8386,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -8405,8 +8410,8 @@ class Api extends Controller
                         }else{
                             if(strtolower($request->transactionType) === 'out'){
     
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
@@ -8427,8 +8432,8 @@ class Api extends Controller
                                     ], 401);
                                 }
                             }else{
-                                $brandSize = Brand::select('btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
-                                $MlSize = ($brandSize['btl_size'] * $request->nobtl);
+                                $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id')->where('id', $request->brand_id)->get()->first();
+                                $MlSize = ($brandSize['actual_btl_size'] * $request->nobtl);
     
                                 Stock::where('company_id', $transactionData->company_id)->where('brand_id', $transactionData->brand_id)->increment('qty', $transactionData->qty);
                                 Stock::where('company_id', $transactionData->company_to_id)->where('brand_id', $transactionData->brand_id)->decrement('qty', $transactionData->qty);
@@ -8817,9 +8822,9 @@ class Api extends Controller
         $month = !empty($request->date) ? date('m', strtotime($request->date)) : date('m');
         $log_data_table_name = $year . '_' . $month . '_log_data';
 
-        $brandSize = Brand::select('btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
+        $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
         if (isset($brandSize)) {
-            $MlSize = ($brandSize[0]['btl_size'] * intval($no_btl)) + ($brandSize[0]['peg_size'] * intval($no_peg));
+            $MlSize = ($brandSize[0]['actual_btl_size'] * intval($no_btl)) + ($brandSize[0]['peg_size'] * intval($no_peg));
             $openingData = DailyOpening::where(['id' => $opening_id,'company_id' => $request->company_id,  'brand_id' => $brand, 'status' => 1])->first();
             if ($openingData) {
                 // stock old quantity
@@ -9036,9 +9041,9 @@ class Api extends Controller
         $date = $dateTime->format('Y-m-d');
         $isSaved = false;
 
-        $brandSize = Brand::select('btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
+        $brandSize = Brand::select('btl_size', 'actual_btl_size', 'category_id', 'peg_size')->where('id', $brand)->get();
         if (isset($brandSize)) {
-            $MlSize = ($brandSize[0]['btl_size'] * intval($no_btl)) + ($brandSize[0]['peg_size'] * intval($no_peg));
+            $MlSize = ($brandSize[0]['actual_btl_size'] * intval($no_btl)) + ($brandSize[0]['peg_size'] * intval($no_peg));
             $physicalData = physical_history::where(['id' => $opening_id,'company_id' => $request->company_id,  'brand_id' => $brand, 'status' => 1])->first();
             if ($physicalData) {
                 // stock old quantity

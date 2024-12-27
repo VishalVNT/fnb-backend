@@ -13,6 +13,7 @@ class Brand extends Model
 		'code',
         'short_name',
         'btl_size',
+        'actual_btl_size',
         'peg_size',
         'no_peg',
         'category_id',
