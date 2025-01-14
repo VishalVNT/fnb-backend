@@ -2270,18 +2270,30 @@ class Api extends Controller
         $data = $request->validate([
             'id' => 'required'
         ]);
-        $task = Category::where('id', $data['id'])->update(['status' => 0]);
-        if ($task) {
+		if(Auth::user()->type == 1)
+		{
+        	// $task = Category::where('id', $data['id'])->update(['status' => 0]);
+			// if ($task) {
+			// 	return response()->json([
+			// 		'message' => 'Category deleted',
+			// 		'type' => 'success'
+			// 	], 201);
+			// } else {
+			// 	return response()->json([
+			// 		'message' => 'Oops! operation failed!',
+			// 		'type' => 'failed'
+			// 	]);
+			// }
             return response()->json([
-                'message' => 'Category deleted',
-                'type' => 'success'
-            ], 201);
-        } else {
-            return response()->json([
-                'message' => 'Oops! operation failed!',
+                'message' => 'You are not authorized to do delete category.',
                 'type' => 'failed'
             ]);
-        }
+		}else{
+			return response()->json([
+					'message' => 'You are not authorized to do delete category.',
+					'type' => 'failed'
+				]);
+		}
     }
     public function deleteSubCategory(Request $request)
     {
@@ -3730,22 +3742,22 @@ class Api extends Controller
 
                 if($rowType[$key] == 'Recipe'){
                     // add p_id if not in p_id array
-                    $all_pid = Sales::where('sales_main_id',$request->main_id)->where('description',$brand . ' recipe sale')->select('id')->get();
-                    if(!empty($all_pid)){
-                        foreach($all_pid as $pkey => $pval){
-                            if(!in_array($pval->id, $p_Id)){
-                                array_push($p_Id,$pval->id);
-                                rsort($p_Id);
-                                $index = array_search($pval->id, $p_Id);
+                    // $all_pid = Sales::where('sales_main_id',$request->main_id)->where('description',$brand . ' recipe sale')->select('id')->get();
+                    // if(!empty($all_pid)){
+                    //     foreach($all_pid as $pkey => $pval){
+                    //         if(!in_array($pval->id, $p_Id)){
+                    //             array_push($p_Id,$pval->id);
+                    //             rsort($p_Id);
+                    //             $index = array_search($pval->id, $p_Id);
 
-                                $sales_type_to_add = $sales_type[$index];
-                                array_splice($sales_type, $index, 0, $sales_type_to_add);
+                    //             $sales_type_to_add = $sales_type[$index];
+                    //             array_splice($sales_type, $index, 0, $sales_type_to_add);
 
-                                $no_peg_to_add = $no_peg[$index];
-                                array_splice($no_peg, $index, 0, $no_peg_to_add);
-                            }
-                        }
-                    }
+                    //             $no_peg_to_add = $no_peg[$index];
+                    //             array_splice($no_peg, $index, 0, $no_peg_to_add);
+                    //         }
+                    //     }
+                    // }
                     if($p_Id[$key] > 0){
                         $brandsData = Recipe::select('id','category_id', 'brand_id', 'serving_size')->where(['recipe_code' => $brand, 'status' => 1])->get();                        
                         $type = $sales_type[$key];
@@ -3775,12 +3787,12 @@ class Api extends Controller
                                 $sales_data['created_by'] = $request->user()->id;
                                 $sales_data['sale_date'] = date('Y-m-d', strtotime($request->invoice_date));
                                 $sales_data['description'] = $brand . ' recipe sale';
-
-                                $fetch = Sales::where(['sales_main_id' => $request->main_id, 'recipe_id' => $brandData['id'],'brand_id' => $brandData['brand_id']])->first();
+                                
+                                $fetch = Sales::where(['sales_main_id' => $request->main_id, 'recipe_id' => $brandData['id'],'brand_id' => $brandData['brand_id']])->where('description', '!=', 'liquor sale')->first();                                
                                 
                                 if(!empty($fetch)){
                                     if((int)$stocks[0]['qty'] + (int)$fetch['qty'] >= (int)$qty){
-                                        $salesDataForLogUpdate = Sales::where(['sales_main_id' => $request->main_id, 'recipe_id' => $brandData['id'],'brand_id' => $brandData['brand_id']])->first();
+                                        $salesDataForLogUpdate = Sales::where(['sales_main_id' => $request->main_id, 'recipe_id' => $brandData['id'],'brand_id' => $brandData['brand_id']])->where('description', '!=', 'liquor sale')->first();
                                         Sales::where(['sales_main_id' => $request->main_id, 'recipe_id' => $brandData['id'],'brand_id' => $brandData['brand_id']])->update($sales_data);
 
                                         $yearForCredit = !empty($salesDataForLogUpdate->sale_date) ? date('Y', strtotime($salesDataForLogUpdate->sale_date)) : date('Y');
@@ -4114,7 +4126,7 @@ class Api extends Controller
                                     $sales_data['description'] = $brand . ' recipe sale';
                                     $sales_data['created_by'] = $request->user()->id;
                                     $sales_data['sale_date'] = date('Y-m-d', strtotime($request->invoice_date));
-    
+                                    
                                     $Sales = Sales::create($sales_data);
                                     if ($Sales) {
 
@@ -4242,6 +4254,7 @@ class Api extends Controller
                         $sales_data['no_peg'] = $no_peg[$key];
                         $sales_data['sales_type'] = $sales_type[$key];
                         $sales_data['created_by'] = $request->user()->id;
+                        $sales_data['liquor_or_recipe'] = 'liquor';
                         $sales_data['sale_date'] = date('Y-m-d', strtotime($request->invoice_date));
                         $sales_data['description'] = 'liquor sale';
 
@@ -4438,6 +4451,7 @@ class Api extends Controller
                         $sales_data['recipe_id'] = NULL;
                         $sales_data['sales_type'] = $sales_type[$key];
                         $sales_data['category_id'] = $category_id[$key];
+                        $sales_data['liquor_or_recipe'] = 'liquor';
                         $sales_data['description'] = 'liquor sale';
                         // get sale quantity in ml
                         if (!empty($servingSize[$key]) && $servingSize[$key] > 0) {
@@ -4574,7 +4588,7 @@ class Api extends Controller
         }else{
             return response()->json([
                 'message' => 'Oops! Operation failed',
-                'type' => 'failed'
+                'type' => 'failed' 
             ], 401);
         }
     }
@@ -4779,7 +4793,7 @@ class Api extends Controller
         $count = Stock::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get()->count();
         $brandSize = Brand::where('id', $req['brand_id'])->get();
         if ($count == 0) {
-            array_push($response, array('total_qty' => 0,'btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size'], 'cost_price' => 0, 'btl_selling_price' => 0));
+            array_push($response, array('total_qty' => 0,'btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size'], 'actual_btl_size' => $brandSize[0]['actual_btl_size'], 'cost_price' => 0, 'btl_selling_price' => 0));
             return $response;
         }
         $data = Stock::where(['company_id' => $req['company_id'], 'brand_id' => $req['brand_id']])->get();
@@ -4791,7 +4805,7 @@ class Api extends Controller
             $result = getBtlPeg($req['brand_id'], $qty);
             $opening = getBtlPeg($req['brand_id'], $openingQty);
             if (empty($result['btl']) && empty($result['peg'])) {
-                array_push($response, array('total_qty' => 0,'btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size'], 'cost_price' => $data[0]['cost_price'], 'btl_selling_price' => $data[0]['btl_selling_price']));
+                array_push($response, array('total_qty' => 0,'btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size'], 'actual_btl_size' => $brandSize[0]['actual_btl_size'], 'cost_price' => $data[0]['cost_price'], 'btl_selling_price' => $data[0]['btl_selling_price']));
                 return $response;
             }
             $data[0]['op_btl'] = $opening['btl'];
@@ -4803,8 +4817,9 @@ class Api extends Controller
             $data[0]['peg'] = intval($result['peg']);
             $data[0]['btl_size'] = $result['btl_size'];
             $data[0]['peg_size'] = $result['peg_size'];
+			$data[0]['actual_btl_size'] = $brandSize[0]['actual_btl_size'];
         } else {
-            array_push($response, array('total_qty' => 0,'btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size']));
+            array_push($response, array('total_qty' => 0,'btl' => 0, 'peg' => 0, 'btl_size' => $brandSize[0]['btl_size'], 'peg_size' => $brandSize[0]['peg_size'], 'actual_btl_size' => $brandSize[0]['actual_btl_size']));
             return $response;
         }
 
@@ -4823,6 +4838,7 @@ class Api extends Controller
     }
     public function bulkStockImport(Request $request)
     {
+
         error_reporting(0);
         $dataArray = $request->data;
         $company_id = $dataArray[0]['company_id'];
@@ -4857,11 +4873,12 @@ class Api extends Controller
                         $opening['company_id'] = $company_id;
                         $opening['brand_id'] = $brandSize[0]['id'];
                         $opening['qty'] = $MlSize;
-                        $opening['date'] = date('Y-m-d', strtotime($dataArr['date'] . '+1 day'));
+                        $opening['store_btl'] = $btl;
+                        $opening['date'] = date('Y-m-d', strtotime($dataArr['date']));
                         $saveOpeningSave = DailyOpening::create($opening);
 
-                        $year = !empty($dataArr['date']) ? date('Y', strtotime($dataArr['date'] . '+1 day')) : date('Y');
-                        $month = !empty($dataArr['date']) ? date('m', strtotime($dataArr['date'] . '+1 day')) : date('m');
+                        $year = !empty($dataArr['date']) ? date('Y', strtotime($dataArr['date'])) : date('Y');
+                        $month = !empty($dataArr['date']) ? date('m', strtotime($dataArr['date'])) : date('m');
                         $log_data_table_name = $year . '_' . $month . '_log_data';
 
                         if (!Schema::hasTable($log_data_table_name)) {
@@ -4909,7 +4926,7 @@ class Api extends Controller
                         // Check if an entry already exists for the given company and invoice date
                         $opening_date_entry_found = DB::table($log_data_table_name)
                             ->where('company_id', $company_id)
-                            ->where('log_date', date('Y-m-d', strtotime($dataArr['date'] . '+1 day')))
+                            ->where('log_date', date('Y-m-d', strtotime($dataArr['date'])))
                             ->where('status', 'active')
                             ->first();
 
@@ -4933,12 +4950,12 @@ class Api extends Controller
                                 ->where('id', $opening_date_entry_found->id)
                                 ->update([
                                     'data' => $logData['data'],
-                                    'log_date' => date('Y-m-d', strtotime($dataArr['date'] . '+1 day')),
+                                    'log_date' => date('Y-m-d', strtotime($dataArr['date'])),
                                 ]);
                         } else {
                             // No existing entry found: Insert new data
                             $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                            $logData['log_date'] = date('Y-m-d', strtotime($dataArr['date'] . '+1 day'));
+                            $logData['log_date'] = date('Y-m-d', strtotime($dataArr['date']));
 
                             DB::table($log_data_table_name)->insert($logData);
                         }
@@ -4950,7 +4967,8 @@ class Api extends Controller
                     $opening['company_id'] = $company_id;
                     $opening['brand_id'] = $brandSize[0]['id'];
                     $opening['qty'] = $MlSize;
-                    $opening['date'] = date('Y-m-d', strtotime($dataArr['date'] . '+1 day'));
+                    $opening['store_btl'] = $btl;
+                    $opening['date'] = date('Y-m-d', strtotime($dataArr['date']));
                     $saveOpeningSave = DailyOpening::create($opening);
 
                     $year = !empty($dataArr['date']) ? date('Y', strtotime($dataArr['date'])) : date('Y');
@@ -5002,7 +5020,7 @@ class Api extends Controller
                     // Check if an entry already exists for the given company and invoice date
                     $opening_date_entry_found = DB::table($log_data_table_name)
                         ->where('company_id', $company_id)
-                        ->where('log_date', date('Y-m-d', strtotime($dataArr['date'] . '+1 day')))
+                        ->where('log_date', date('Y-m-d', strtotime($dataArr['date'])))
                         ->where('status', 'active')
                         ->first();
 
@@ -5026,12 +5044,12 @@ class Api extends Controller
                             ->where('id', $opening_date_entry_found->id)
                             ->update([
                                 'data' => $logData['data'],
-                                'log_date' => date('Y-m-d', strtotime($dataArr['date'] . '+1 day')),
+                                'log_date' => date('Y-m-d', strtotime($dataArr['date'])),
                             ]);
                     } else {
                         // No existing entry found: Insert new data
                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                        $logData['log_date'] = date('Y-m-d', strtotime($dataArr['date'] . '+1 day'));
+                        $logData['log_date'] = date('Y-m-d', strtotime($dataArr['date']));
 
                         DB::table($log_data_table_name)->insert($logData);
                     }
@@ -5314,7 +5332,7 @@ class Api extends Controller
                 {
                     $data_for_log_data['purchase_price'] = $dataArr['rate'];
                 }else{
-                    $data_for_log_data['purchase_price'] = !empty($purchase_price) && !empty($purchase_price->cost_price) ? $purchase_price->cost_price * $nobtl[$key] : 0;
+                    $data_for_log_data['purchase_price'] = !empty($purchase_price) && !empty($purchase_price->cost_price) ? $purchase_price->cost_price * $btl : 0;
                 }
                 $data_for_log_data['vendor_id'] = $supplier[0]['id'];
                 $data_for_log_data['vendor_name'] = $supplier[0]['name'];
@@ -5391,6 +5409,14 @@ class Api extends Controller
             $purchases = Purchase::where('invoice_no', $purchaseData['invoice_no'])->update(['purchase_list_id' => $save2->id, 'total_amount' => $totalAmount]);
         }
 
+        // update total amount
+        $allPurchases = Purchase::where('purchase_list_id', $save2->id)->get();
+        $finalTotalAmount = 0;
+        foreach($allPurchases as $purchaseData)
+        {
+            $finalTotalAmount = $finalTotalAmount + $purchaseData['total_amount'];
+        }
+        PurchaseList::where('id', $save2->id)->update(['total_amount' => $finalTotalAmount]);
 
         if ($counter > 0 || $skipped > 0) {
             $data_log = [
@@ -5439,7 +5465,7 @@ class Api extends Controller
             $sales_main_data['invoice_no'] = 1;
         }
 
-        $sales_main_data['invoice_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
+        $sales_main_data['invoice_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
         $sales_main_data['company_id'] = $data['company_id'];
         $sales_main_data['created_by'] = $request->user()->id;
         $SalesMain = SalesMain::create($sales_main_data);
@@ -5466,7 +5492,7 @@ class Api extends Controller
                     $brand_id = $brand['brand_id'];
                     $data['category_id'] = $brand['category_id'];
                     $data['brand_id'] = $brand['brand_id'];
-                    $data['sale_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+                    $data['sale_date'] = date('Y-m-d', strtotime($dataAr['date']));
                     $peg_size = Brand::select('peg_size', 'btl_size', 'actual_btl_size', 'id', 'name', 'category_id')->where(['id' => $brand_id])->get();
                     $stock = Stock::select('id', 'qty', 'btl_selling_price', 'peg_selling_price')->where(['company_id' => $data['company_id'], 'brand_id' => $brand_id])->first();
                     
@@ -5479,6 +5505,10 @@ class Api extends Controller
                             $MlSize2 = 0;
                             $MlSize3 = 0;
         
+    
+                            $year = !empty($dataAr['date']) ? date('Y', strtotime($dataAr['date'])) : date('Y');
+                            $month = !empty($dataAr['date']) ? date('m', strtotime($dataAr['date'])) : date('m');
+                            $log_data_table_name = $year . '_' . $month . '_log_data';
                             if ($isCocktail) {
                                 if($dataAr['sale'] > 0)
                                 {
@@ -5496,10 +5526,6 @@ class Api extends Controller
                                     $data['description'] = $brand->recipe_code . ' recipe sale';
                                     $Sales = Sales::create($data);
                                     $success = true;
-    
-                                    $year = !empty($dataAr['date']) ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
-                                    $month = !empty($dataAr['date']) ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
-                                    $log_data_table_name = $year . '_' . $month . '_log_data';
     
                                     if (!Schema::hasTable($log_data_table_name)) {
                                         Schema::create($log_data_table_name, function (Blueprint $table) {
@@ -5548,7 +5574,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $request->company_id)
-                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -5572,12 +5598,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')),
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -5646,7 +5672,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $request->company_id)
-                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -5670,12 +5696,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')),
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -5744,7 +5770,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $request->company_id)
-                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -5768,12 +5794,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')),
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -5842,7 +5868,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $request->company_id)
-                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataArray[0]['date'])))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -5866,12 +5892,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day')),
+                                                'log_date' => date('Y-m-d', strtotime($dataArray[0]['date'])),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date'] . ' +1 day'));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataArray[0]['date']));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -5893,8 +5919,8 @@ class Api extends Controller
                                 $spoAr1 = !empty($spoAr[0]) ? $spoAr[0] : 0;
                                 $spoAr2 = !empty($spoAr[1]) ? $spoAr[1] : 0;
     
-                                $year = !empty($dataAr['date']) ? date('Y', strtotime($dataAr['date'] . ' +1 day')) : date('Y');
-                                $month = !empty($dataAr['date']) ? date('m', strtotime($dataAr['date'] . ' +1 day')) : date('m');
+                                $year = !empty($dataAr['date']) ? date('Y', strtotime($dataAr['date'])) : date('Y');
+                                $month = !empty($dataAr['date']) ? date('m', strtotime($dataAr['date'])) : date('m');
                                 $log_data_table_name = $year . '_' . $month . '_log_data';
         
                                 if($dataAr['sale'] > 0)
@@ -5909,7 +5935,8 @@ class Api extends Controller
                                     $data['no_btl'] = $saleAr1;
                                     $data['no_peg'] = $saleAr2;
                                     $data['liquor_or_recipe'] = 'liquor';
-                                    $data['description'] = 'liquor sale';
+                                    $data['description'] = 'liquor sale';                                    
+                                    $data['recipe_id'] = NULL;
                                     $Sales = Sales::create($data);
     
                                     if (!Schema::hasTable($log_data_table_name)) {
@@ -5959,7 +5986,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $data['company_id'])
-                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'])))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -5983,12 +6010,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
+                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'])),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date']));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -6002,7 +6029,8 @@ class Api extends Controller
                                     $data['no_peg'] = $nc2;
                                     $data['sales_main_id'] = $SalesMain->id;
                                     $data['liquor_or_recipe'] = 'liquor';
-                                    $data['description'] = 'liquor sale';
+                                    $data['description'] = 'liquor sale';                                    
+                                    $data['recipe_id'] = NULL;
                                     $Sales = Sales::create($data);
                                     $success = true;
 
@@ -6053,7 +6081,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $data['company_id'])
-                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'])))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -6077,12 +6105,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
+                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'])),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date']));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -6096,7 +6124,8 @@ class Api extends Controller
                                     $data['no_peg'] = $banAr2;
                                     $data['sales_main_id'] = $SalesMain->id;
                                     $data['liquor_or_recipe'] = 'liquor';
-                                    $data['description'] = 'liquor sale';
+                                    $data['description'] = 'liquor sale';                                    
+                                    $data['recipe_id'] = NULL;
                                     $Sales = Sales::create($data);
                                     $success = true;
 
@@ -6147,7 +6176,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $data['company_id'])
-                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'])))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -6171,12 +6200,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
+                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'])),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date']));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -6191,7 +6220,8 @@ class Api extends Controller
                                     $data['no_peg'] = $spoAr2;
                                     $data['sales_main_id'] = $SalesMain->id;
                                     $data['liquor_or_recipe'] = 'liquor';
-                                    $data['description'] = 'liquor sale';
+                                    $data['description'] = 'liquor sale';                                    
+                                    $data['recipe_id'] = NULL;
                                     $Sales = Sales::create($data);
                                     $success = true;
 
@@ -6242,7 +6272,7 @@ class Api extends Controller
                                     // Check if an entry already exists for the given company and invoice date
                                     $sales_date_entry_found = DB::table($log_data_table_name)
                                         ->where('company_id', $data['company_id'])
-                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')))
+                                        ->where('log_date', date('Y-m-d', strtotime($dataAr['date'])))
                                         ->where('status', 'active')
                                         ->first();
     
@@ -6266,12 +6296,12 @@ class Api extends Controller
                                             ->where('id', $sales_date_entry_found->id)
                                             ->update([
                                                 'data' => $logData['data'],
-                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'] . ' +1 day')),
+                                                'log_date' => date('Y-m-d', strtotime($dataAr['date'])),
                                             ]);
                                     } else {
                                         // No existing entry found: Insert new data
                                         $logData['data'] = json_encode([$data_for_log_data]); // Ensure it's stored as an array
-                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date'] . ' +1 day'));
+                                        $logData['log_date'] = date('Y-m-d', strtotime($dataAr['date']));
     
                                         DB::table($log_data_table_name)->insert($logData);
                                     }
@@ -6440,7 +6470,7 @@ class Api extends Controller
                                         'brands.btl_size as size','brands.peg_size as peg_size', 
                                         'sales.sales_type', 'sales.no_btl', 'sales.qty', 
                                         'sales.no_peg', 'sales.sale_date', 'sales.id', 'sales.description',
-                                        'subcategories.name as subcategory_name')
+                                        'subcategories.name as subcategory_name','actual_btl_size')
                                         ->where('liquor_or_recipe', 'liquor')
                                         ->join('brands', 'brands.id', '=', 'sales.brand_id')
                                         ->join('subcategories','subcategories.id', '=','brands.subcategory_id')
@@ -6467,7 +6497,7 @@ class Api extends Controller
                                 ->groupBy('sales.description', 'sales_type') // Add other necessary columns here
                                 ->orderBy('sales.id', 'DESC')
                                 ->get();
-                                
+
             if ($recipeData->isNotEmpty()) {
                 $recipeData = $recipeData->toArray(); // Convert the collection to an array
             
@@ -6487,9 +6517,9 @@ class Api extends Controller
              
                     // calculate glass
                     $parameters_for_glass = Recipe::where('recipes.id',$value['recipe_id'])->join('brands','brands.id','recipes.brand_id')->select('peg_size','btl_size','serving_size')->first();
-
+                    
                     if(!empty($parameters_for_glass)){
-                        $glassQty = (((int)$value['total_peg'] * $parameters_for_glass->peg_size) + (int)$value['total_btl'] * $parameters_for_glass->btl_size) / $parameters_for_glass->serving_size;
+                        $glassQty = (((int)$value['no_peg'] * $parameters_for_glass->peg_size) + (int)$value['no_btl'] * $parameters_for_glass->btl_size) / $parameters_for_glass->serving_size;
                         $value['glass_qty'] = round($glassQty);
 
                         // Get all the brands in this recipe
@@ -8790,9 +8820,9 @@ class Api extends Controller
             'company_id' => 'required'
         ]);
         if (!empty($request->keyword))
-            $res = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.id','daily_openings.brand_id', 'daily_openings.qty', 'daily_openings.date', 'categories.name as category','daily_openings.store_btl','daily_openings.store_peg','daily_openings.bar1_btl','daily_openings.bar1_peg','daily_openings.bar2_btl','daily_openings.bar2_peg')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], ['brands.name', 'like', '%' . $request->keyword . '%'], 'daily_openings.status' => 1])->get();
+            $res = DailyOpening::select('brands.name', 'btl_size', 'brands.actual_btl_size', 'peg_size', 'daily_openings.id','daily_openings.brand_id', 'daily_openings.qty', 'daily_openings.date', 'categories.name as category','daily_openings.store_btl','daily_openings.store_peg','daily_openings.bar1_btl','daily_openings.bar1_peg','daily_openings.bar2_btl','daily_openings.bar2_peg')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], ['brands.name', 'like', '%' . $request->keyword . '%'], 'daily_openings.status' => 1])->get();
         else
-            $res = DailyOpening::select('brands.name', 'btl_size', 'peg_size', 'daily_openings.id','daily_openings.brand_id', 'categories.name as category', 'daily_openings.qty', 'daily_openings.date','daily_openings.store_btl','daily_openings.store_peg','daily_openings.bar1_btl','daily_openings.bar1_peg','daily_openings.bar2_btl','daily_openings.bar2_peg')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], 'daily_openings.status' => 1])->get();
+            $res = DailyOpening::select('brands.name', 'btl_size', 'brands.actual_btl_size', 'peg_size', 'daily_openings.id','daily_openings.brand_id', 'categories.name as category', 'daily_openings.qty', 'daily_openings.date','daily_openings.store_btl','daily_openings.store_peg','daily_openings.bar1_btl','daily_openings.bar1_peg','daily_openings.bar2_btl','daily_openings.bar2_peg')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], 'daily_openings.status' => 1])->get();
         if ($res) {
             return response()->json($res);
         } else {

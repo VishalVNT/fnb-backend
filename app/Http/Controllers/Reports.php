@@ -1084,13 +1084,17 @@ class Reports extends Controller
                 // If months are the same, keep your original logic
                 $table_name = $from_date_table_year . '_' . $from_date_table_month . '_' . 'log_data';
 
-                $result = DB::table($table_name)
-                            ->select('company_id', 'log_date', 'data')
-                            ->where('company_id', $company_id)
-                            ->whereDate('log_date', '>=', $from_date)
-                            ->whereDate('log_date', '<=', $to_date)
-                            ->orderBy('log_date', 'asc')
-                            ->get();
+                if (Schema::hasTable($table_name)) {
+                    $result = DB::table($table_name)
+                                ->select('company_id', 'log_date', 'data')
+                                ->where('company_id', $company_id)
+                                ->whereDate('log_date', '>=', $from_date)
+                                ->whereDate('log_date', '<=', $to_date)
+                                ->orderBy('log_date', 'asc')
+                                ->get();
+                }else{
+                    $result = [];
+                }
 
                 $this->processLogDataForStockRegister($table_name, $openingData, $company_id, $from_date, $result, $json);
             } else {
@@ -1164,7 +1168,7 @@ class Reports extends Controller
                         'final_purchase' => 0,
                         'final_transfer' => 0,
                         'final_total' => 0,
-                        'final_sales' => 0,
+                        'final_sales' => 0, 
                         'final_closing' => 0,
                     ];
                 }
@@ -1180,7 +1184,13 @@ class Reports extends Controller
                 // Store individual brand details
                 $groupedData[$category][$btl_size]['brands'][] = $entry;
             }
-        
+
+            if (!empty($groupedData)) {
+                foreach ($groupedData as $category_name => $btlSizes) {
+                    krsort($btlSizes);
+                    $groupedData[$category_name] = $btlSizes;
+                }
+            }
             // Prepare final JSON data
             foreach ($groupedData as $category_name => $btlSizes) {
                 // First, add category row with empty values
@@ -1242,7 +1252,6 @@ class Reports extends Controller
                 }
             }
         }
-        
         
         return array_values($finalJson);
     }
@@ -3146,6 +3155,7 @@ class Reports extends Controller
         $all_row_data = [];
         $company_id = $request->company_id;
         $currentDate = $request->to_date;
+        $pageNo = !empty($request->pageNo) ? $request->pageNo : 1;
 
         $tables = $this->getAllLogDataTables();
 
@@ -3182,11 +3192,11 @@ class Reports extends Controller
         // Process current and last financial year data
         $all_data_for_category_and_brands = array_merge($all_row_data, $openingData);
 
-        $all_category_brands = $this->processRowData($all_data_for_category_and_brands);
-        $opening_data_all_category_brands = $this->processRowData($openingData);
+        $all_category_brands = $this->processRowData($all_data_for_category_and_brands, $pageNo);
+        $opening_data_all_category_brands = $this->processRowData($openingData, $pageNo);
 
         // Calculate opening, purchase, sales, and closing data
-        $this->calculateBrandwiseData($all_category_brands, $all_row_data, $opening_data_all_category_brands, $openingData, $opening_data, $purchase_data, $sales_data, $closing_data);
+        $this->calculateBrandwiseData($all_category_brands, $all_row_data, $opening_data_all_category_brands, $openingData, $opening_data, $purchase_data, $sales_data, $closing_data, $pageNo);
         
         $all_brands_and_tp_no = $this->getAllBrandsAndTpNo($all_row_data);
             
@@ -3545,7 +3555,7 @@ class Reports extends Controller
 				$btl = $get_btl_and_peg_separated[0] ?? 0;
 				$peg = !empty($get_btl_and_peg_separated[1]) ? $get_btl_and_peg_separated[1] : 0;
 
-				$qty_in_ml = ($btl * $btl_size) + ($peg * ($peg_size->peg_size ?? 0));
+				$qty_in_ml = ($btl * $peg_size->actual_btl_size) + ($peg * ($peg_size->peg_size ?? 0));
 
 				$qty_in_btl_peg = convertBtlPeg($qty_in_ml, $btl_size, $peg_size->peg_size ?? 0);
 
@@ -3658,7 +3668,7 @@ class Reports extends Controller
     /**
      * Process row data into categories, bottle sizes, and brands
      */
-    protected function processRowData($row_data)
+    protected function processRowData($row_data, $pageNo)
     {
         $category_brands = [];
 
@@ -3666,8 +3676,18 @@ class Reports extends Controller
             $json_data = json_decode($data_value);
             if (!empty($json_data)) {
                 foreach ($json_data as $json_value) {
-                    // Collect brand names and bottle sizes under categories
-                    $category_brands[$json_value->category_name][$json_value->btl_size][$json_value->brand_name] = 0.00; // Initialize quantity
+                    if($pageNo == 1)
+                    {
+                        if (in_array($json_value->btl_size, [4500, 2000, 1000, 750, 700, 500])) {
+                            // Collect brand names and bottle sizes under categories
+                            $category_brands[$json_value->category_name][$json_value->btl_size][$json_value->brand_name] = 0.00; // Initialize quantity
+                        }
+                    }else{
+                        if (!in_array($json_value->btl_size, [4500, 2000, 1000, 750, 700, 500])) {
+                            // Collect brand names and bottle sizes under categories
+                            $category_brands[$json_value->category_name][$json_value->btl_size][$json_value->brand_name] = 0.00; // Initialize quantity
+                        }
+                    }
                 }
             }
         }
@@ -3678,24 +3698,47 @@ class Reports extends Controller
     /**
      * Calculate brandwise opening, purchase, sales, and closing data
      */
-    protected function calculateBrandwiseData($all_category_brands, $all_row_data, $openingData_category_brands, $openingData, &$opening_data, &$purchase_data, &$sales_data, &$closing_data)
+    protected function calculateBrandwiseData($all_category_brands, $all_row_data, $openingData_category_brands, $openingData, &$opening_data, &$purchase_data, &$sales_data, &$closing_data, $pageNo)
     {
         foreach ($all_category_brands as $category => $btl_sizes) {
             foreach ($btl_sizes as $btl_size => $brands) {
-                foreach ($brands as $brand => $_) {
-                    // Initialize data
-                    $opening_data[$category][$btl_size][$brand] = 0.00;
-                    $purchase_data[$category][$btl_size][$brand] = 0.00;
-                    $sales_data[$category][$btl_size][$brand] = 0.00;
-
-                    // Calculate opening data from last financial year
-                    $this->calculateOpeningData($category, $btl_size, $brand, $openingData, $opening_data);
-
-                    // Process current financial year data
-                    $this->processTransactionData($all_row_data, $category, $btl_size, $brand, $opening_data, $purchase_data, $sales_data);
-                    
-                    // Calculate closing data as opening + purchase - sales
-                    $closing_data[$category][$btl_size][$brand] = $opening_data[$category][$btl_size][$brand] + $purchase_data[$category][$btl_size][$brand] - $sales_data[$category][$btl_size][$brand];
+                if($pageNo == 1)
+                {
+                    if (in_array($btl_size, [4500, 2000, 1000, 750, 700, 500])) {
+                        foreach ($brands as $brand => $_) {
+                            // Initialize data
+                            $opening_data[$category][$btl_size][$brand] = 0.00;
+                            $purchase_data[$category][$btl_size][$brand] = 0.00;
+                            $sales_data[$category][$btl_size][$brand] = 0.00;
+        
+                            // Calculate opening data from last financial year
+                            $this->calculateOpeningData($category, $btl_size, $brand, $openingData, $opening_data);
+        
+                            // Process current financial year data
+                            $this->processTransactionData($all_row_data, $category, $btl_size, $brand, $opening_data, $purchase_data, $sales_data);
+                            
+                            // Calculate closing data as opening + purchase - sales
+                            $closing_data[$category][$btl_size][$brand] = $opening_data[$category][$btl_size][$brand] + $purchase_data[$category][$btl_size][$brand] - $sales_data[$category][$btl_size][$brand];
+                        }
+                    }
+                }else{
+                    if (!in_array($btl_size, [4500, 2000, 1000, 750, 700, 500])) {
+                        foreach ($brands as $brand => $_) {
+                            // Initialize data
+                            $opening_data[$category][$btl_size][$brand] = 0.00;
+                            $purchase_data[$category][$btl_size][$brand] = 0.00;
+                            $sales_data[$category][$btl_size][$brand] = 0.00;
+        
+                            // Calculate opening data from last financial year
+                            $this->calculateOpeningData($category, $btl_size, $brand, $openingData, $opening_data);
+        
+                            // Process current financial year data
+                            $this->processTransactionData($all_row_data, $category, $btl_size, $brand, $opening_data, $purchase_data, $sales_data);
+                            
+                            // Calculate closing data as opening + purchase - sales
+                            $closing_data[$category][$btl_size][$brand] = $opening_data[$category][$btl_size][$brand] + $purchase_data[$category][$btl_size][$brand] - $sales_data[$category][$btl_size][$brand];
+                        }
+                    }
                 }
             }
         }
@@ -3750,9 +3793,6 @@ class Reports extends Controller
 
         return $brand_tp_data;
     }
-
-    
-
 
     /**
      * Calculate opening data from last financial year

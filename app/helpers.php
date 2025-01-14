@@ -16,9 +16,9 @@ function SaveLog($data)
 }
 function getBtlPeg($brand_id, $qty)
 {
-	$brandSize = Brand::select('btl_size', 'peg_size')->where('id', $brand_id)->get();
+	$brandSize = Brand::select('btl_size', 'peg_size', 'actual_btl_size')->where('id', $brand_id)->get();
 	if ($brandSize) {
-		$brand_size = $brandSize[0]['btl_size'];
+		$brand_size = $brandSize[0]['actual_btl_size'];
 		// system stock
 		$btl = 0; 
 		$peg = 0;
@@ -76,8 +76,10 @@ function getBtlPegForRecipe($brand_id, $qty)
 }
 function convertBtlPeg($qty, $brandSize, $peg_size)
 {
-	if ($brandSize > 0) {
-		$brand_size = $brandSize;
+	$actual_btl_size = DB::table('brands')->where('btl_size', $brandSize)->where('peg_size', $peg_size)->select('actual_btl_size')->first();
+	// change to actual btl size
+	if ($actual_btl_size->actual_btl_size > 0) {
+		$brand_size = $actual_btl_size->actual_btl_size;
 		// system stock
 		$btl = 0;
 		$peg = 0;
