@@ -1344,82 +1344,89 @@ class Reports extends Controller
                         $categoryName = $dvalue['category_name'];
                         $brandId = $dvalue['brand_id'];
         
-                        // Initialize brand data if it doesn't exist
-                        if (!isset($brandAggregatedData[$categoryName][$brandId])) {
-                            $brandAggregatedData[$categoryName][$brandId] = [
-                                'brand_name' => $dvalue['brand_name'],
-                                'btl_size' => $dvalue['btl_size'],
-                                'peg_size' => $dvalue['peg_size'],
-                                'opening_balance' => isset($openingData[$brandId]) ? $openingData[$brandId] : 0,
-                                'purchase' => 0,
-                                'transfer' => 0,
-                                'total' => isset($openingData[$brandId]) ? $openingData[$brandId] : 0,
-                                'sales' => 0,
-                                'closing_balance' => isset($openingData[$brandId]) ? $openingData[$brandId] : 0,
-                            ];
-                        }
-        
-                        // Calculate Opening
-                        if(isset($openingData[$brandId])){
-                            $brandAggregatedData[$categoryName][$brandId]['opening_balance'] = $openingData[$brandId];
-                        }else{
-                            $brandAggregatedData[$categoryName][$brandId]['opening_balance'] = "0.00";
-                        }
-        
-                        // Calculate Purchase
-                        if ($dvalue['transaction_type'] == 'purchase' || $dvalue['transaction_type'] == 'opening') {
-                            if ($dvalue['transaction_category'] == 'credit') {
-                                $brandAggregatedData[$categoryName][$brandId]['purchase'] += (int)$dvalue['qty'];
-                            } elseif ($dvalue['transaction_category'] == 'debit') {
-                                $brandAggregatedData[$categoryName][$brandId]['purchase'] -= (int)$dvalue['qty'];
+                        // check if brand is active or not
+                        $checkBrand = DB::table('brands')->where('status',1)->where('id',$brandId)->first();
+
+                        if(!empty($checkBrand))
+                        {
+                            // Initialize brand data if it doesn't exist
+                            if (!isset($brandAggregatedData[$categoryName][$brandId])) {
+                                $brandAggregatedData[$categoryName][$brandId] = [
+                                    'brand_name' => $dvalue['brand_name'],
+                                    'btl_size' => $dvalue['btl_size'],
+                                    'peg_size' => $dvalue['peg_size'],
+                                    'opening_balance' => isset($openingData[$brandId]) ? $openingData[$brandId] : 0,
+                                    'purchase' => 0,
+                                    'transfer' => 0,
+                                    'total' => isset($openingData[$brandId]) ? $openingData[$brandId] : 0,
+                                    'sales' => 0,
+                                    'closing_balance' => isset($openingData[$brandId]) ? $openingData[$brandId] : 0,
+                                ];
                             }
-                        }
-        
-                        // Calculate Transfer
-                        if ($dvalue['transaction_type'] == 'transfer') {
-                            if ($dvalue['transaction_category'] == 'credit') {
-                                $brandAggregatedData[$categoryName][$brandId]['transfer'] += (int)$dvalue['qty'];
-                            } elseif ($dvalue['transaction_category'] == 'debit') {
-                                $brandAggregatedData[$categoryName][$brandId]['transfer'] -= (int)$dvalue['qty'];
+                            // Calculate Opening
+                            if(isset($openingData[$brandId])){
+                                $brandAggregatedData[$categoryName][$brandId]['opening_balance'] = $openingData[$brandId];
+                            }else{
+                                $brandAggregatedData[$categoryName][$brandId]['opening_balance'] = "0.00";
                             }
-                        }
-        
-                        // Calculate Sales
-                        if ($dvalue['transaction_type'] == 'sales') {
-                            if ($dvalue['transaction_category'] == 'debit') {
-                                $brandAggregatedData[$categoryName][$brandId]['sales'] += (int)$dvalue['qty'];
-                            } elseif ($dvalue['transaction_category'] == 'credit') {
-                                $brandAggregatedData[$categoryName][$brandId]['sales'] -= (int)$dvalue['qty'];
+            
+                            // Calculate Purchase
+                            if ($dvalue['transaction_type'] == 'purchase' || $dvalue['transaction_type'] == 'opening') {
+                                if ($dvalue['transaction_category'] == 'credit') {
+                                    $brandAggregatedData[$categoryName][$brandId]['purchase'] += (int)$dvalue['qty'];
+                                } elseif ($dvalue['transaction_category'] == 'debit') {
+                                    $brandAggregatedData[$categoryName][$brandId]['purchase'] -= (int)$dvalue['qty'];
+                                }
                             }
+                            // Calculate Transfer
+                            if ($dvalue['transaction_type'] == 'transfer') {
+                                if ($dvalue['transaction_category'] == 'credit') {
+                                    $brandAggregatedData[$categoryName][$brandId]['transfer'] += (int)$dvalue['qty'];
+                                } elseif ($dvalue['transaction_category'] == 'debit') {
+                                    $brandAggregatedData[$categoryName][$brandId]['transfer'] -= (int)$dvalue['qty'];
+                                }
+                            }
+            
+                            // Calculate Sales
+                            if ($dvalue['transaction_type'] == 'sales') {
+                                if ($dvalue['transaction_category'] == 'debit') {
+                                    $brandAggregatedData[$categoryName][$brandId]['sales'] += (int)$dvalue['qty'];
+                                } elseif ($dvalue['transaction_category'] == 'credit') {
+                                    $brandAggregatedData[$categoryName][$brandId]['sales'] -= (int)$dvalue['qty'];
+                                }
+                            }
+            
+                            // Update total and closing balance based on the aggregated values
+                            $brandAggregatedData[$categoryName][$brandId]['total'] = $brandAggregatedData[$categoryName][$brandId]['opening_balance'] +
+                                $brandAggregatedData[$categoryName][$brandId]['purchase'] +
+                                $brandAggregatedData[$categoryName][$brandId]['transfer'];
+            
+                            $brandAggregatedData[$categoryName][$brandId]['closing_balance'] = $brandAggregatedData[$categoryName][$brandId]['total'] - $brandAggregatedData[$categoryName][$brandId]['sales'];
                         }
-        
-                        // Update total and closing balance based on the aggregated values
-                        $brandAggregatedData[$categoryName][$brandId]['total'] = $brandAggregatedData[$categoryName][$brandId]['opening_balance'] +
-                            $brandAggregatedData[$categoryName][$brandId]['purchase'] +
-                            $brandAggregatedData[$categoryName][$brandId]['transfer'];
-        
-                        $brandAggregatedData[$categoryName][$brandId]['closing_balance'] = $brandAggregatedData[$categoryName][$brandId]['total'] - $brandAggregatedData[$categoryName][$brandId]['sales'];
                     }
                 }
             }
         }else{
             foreach($openingData as $key => $value)
             {
-                $brand_details = DB::table('brands')->where('id', $key)->select('category_id', 'id','name','btl_size', 'peg_size')->first();
+                $brand_details = DB::table('brands')->where('id', $key)->where('brands.status', 1)->select('category_id', 'id','name','btl_size', 'peg_size')->first();
 
-                $catDetails = DB::table('categories')->where('id', $brand_details->category_id)->select('name')->first();
-
-                $brandAggregatedData[$catDetails->name][$key] = [
-                    'brand_name' => $brand_details->name,
-                    'btl_size' => $brand_details->btl_size,
-                    'peg_size' => $brand_details->peg_size,
-                    'opening_balance' => isset($value) ? $value : 0,
-                    'purchase' => 0,
-                    'transfer' => 0,
-                    'total' => isset($value) ? $value : 0,
-                    'sales' => 0,
-                    'closing_balance' => isset($value) ? $value : 0,
-                ];
+                if(!empty($brand_details))
+                {
+                    $catDetails = DB::table('categories')->where('categories.status', 1)->where('id', $brand_details->category_id)->select('name')->first();
+    
+                    $brandAggregatedData[$catDetails->name][$key] = [
+                        'brand_name' => $brand_details->name,
+                        'btl_size' => $brand_details->btl_size,
+                        'peg_size' => $brand_details->peg_size,
+                        'opening_balance' => isset($value) ? $value : 0,
+                        'purchase' => 0,
+                        'transfer' => 0,
+                        'total' => isset($value) ? $value : 0,
+                        'sales' => 0,
+                        'closing_balance' => isset($value) ? $value : 0,
+                    ];
+                }
             }
         }
         
@@ -1427,6 +1434,7 @@ class Reports extends Controller
         $brandIds = array_keys($openingData);
         $brands = DB::table('brands')
                     ->whereIn('id', $brandIds)
+                    ->where('status',1)
                     ->select('id', 'name', 'category_id', 'btl_size', 'peg_size')
                     ->get()
                     ->keyBy('id');
@@ -3303,7 +3311,7 @@ class Reports extends Controller
             {
                 foreach ($sizesVal as $brands => $qty) {
                     // Get brand details
-                    $brand_details = DB::table('brands')->where('name', $brands)->select('peg_size', 'btl_size')->first();
+                    $brand_details = DB::table('brands')->where('status',1)->where('name', $brands)->select('peg_size', 'btl_size')->first();
                     
                     // Remove the negative sign temporarily for conversion
                     $absoluteQty = abs($qty);
@@ -3324,7 +3332,7 @@ class Reports extends Controller
             {
                 foreach ($sizesVal as $brands => $qty) {
                     // Get brand details
-                    $brand_details = DB::table('brands')->where('name', $brands)->select('peg_size', 'btl_size')->first();
+                    $brand_details = DB::table('brands')->where('status',1)->where('name', $brands)->select('peg_size', 'btl_size')->first();
                     
                     // Remove the negative sign temporarily for conversion
                     $absoluteQty = abs($qty);
@@ -3345,7 +3353,7 @@ class Reports extends Controller
             {
                 foreach ($sizesVal as $brands => $qty) {
                     // Get brand details
-                    $brand_details = DB::table('brands')->where('name', $brands)->select('peg_size', 'btl_size')->first();
+                    $brand_details = DB::table('brands')->where('status',1)->where('name', $brands)->select('peg_size', 'btl_size')->first();
                     
                     // Remove the negative sign temporarily for conversion
                     $absoluteQty = abs($qty);
@@ -3366,7 +3374,7 @@ class Reports extends Controller
             {
                 foreach ($sizesVal as $brands => $qty) {
                     // Get brand details
-                    $brand_details = DB::table('brands')->where('name', $brands)->select('peg_size', 'btl_size')->first();
+                    $brand_details = DB::table('brands')->where('status',1)->where('name', $brands)->select('peg_size', 'btl_size')->first();
                     
                     // Remove the negative sign temporarily for conversion
                     $absoluteQty = abs($qty);
@@ -3489,7 +3497,7 @@ class Reports extends Controller
             return $posA <=> $posB;
         });
 		
-		$openingDataTotals = $this->brandwiseFromBottleStaticTotalToBtlPeg($opening_data);
+		$openingDataTotals = $this->brandwiseFromBottleStaticTotalToBtlPeg($opening_data);        
         $purchaseDataTotals = $this->brandwiseFromBottleStaticTotalToBtlPeg($purchase_data);
         $salesDataTotals = $this->brandwiseFromBottleStaticTotalToBtlPeg($sales_data);
         $closingDataTotals = $this->brandwiseFromBottleStaticTotalToBtlPeg($closing_data);
@@ -3500,6 +3508,44 @@ class Reports extends Controller
         $subTotals['sales'] = $salesDataTotals;
         $subTotals['closing'] = $closingDataTotals;
 
+        $final_data_to_send = [];
+
+        if(!empty($opening_data))
+        {
+            $i = 0;
+            $final_data_to_send['categories'] = [];
+
+            foreach($opening_data as $category_name => $btl_sizes)
+            {
+                $final_data_to_send['categories'][$i]['category_name'] = $category_name;
+                $final_data_to_send['categories'][$i]['brands'] = [];
+                $final_data_to_send['categories'][$i]['btl_sizes'] = [];
+
+                foreach($btl_sizes as $btl_size => $brands)
+                {
+                    if(!in_array($btl_size, $final_data_to_send['categories'][$i]['btl_sizes']))
+                    {
+                        array_push($final_data_to_send['categories'][$i]['btl_sizes'], $btl_size);
+                    }
+                    foreach($brands as $brand => $qty)
+                    {
+                        $data_for_brands = [];
+                        $data_for_brands['brand_name'] = $brand;
+                        $data_for_brands['btl_size'] = $btl_size;
+                        $data_for_brands['opening_balance'] = $qty;
+                        $data_for_brands['purchase'] = [];
+                        $data_for_brands['purchase']['tp_no'] = !empty($all_brands_and_tp_no[$brand]) ? $all_brands_and_tp_no[$brand] : '';
+                        $data_for_brands['purchase']['quantity'] = $purchase_data[$category_name][$btl_size][$brand];
+                        $data_for_brands['sales'] = $sales_data[$category_name][$btl_size][$brand];
+                        $data_for_brands['closing_balance'] = $closing_data[$category_name][$btl_size][$brand];
+                        array_push($final_data_to_send['categories'][$i]['brands'], $data_for_brands);
+                    }
+                }
+                $i++;
+            }
+
+
+        }
         return [
             'opening' => $opening_data,
             'purchase' => $purchase_data,
@@ -3507,7 +3553,8 @@ class Reports extends Controller
             'closing' => $closing_data,
             'quantities' => $result,
             'subTotals' => $subTotals,
-            'all_brands_and_tp_no' => $all_brands_and_tp_no
+            'all_brands_and_tp_no' => $all_brands_and_tp_no,
+            'final_data_to_send' => $final_data_to_send
         ];
     }
 
@@ -3528,15 +3575,22 @@ class Reports extends Controller
 		// Sort allBtlSizes in descending order
 		$allBtlSizes = array_keys($allBtlSizes);
 		rsort($allBtlSizes);
-
+        
 		// Step 2: Initialize return data with all bottle sizes set to 0
 		if (!empty($data)) {
 			foreach ($data as $categoryName => $btlSizes) {
-				$returnData[$categoryName] = array_fill_keys($allBtlSizes, 0);
+				foreach ($allBtlSizes as $btlSize) {
+					$returnData[$categoryName][$btlSize] = [
+						'btl' => 0,
+						'peg' => 0,
+					];
+				}
 
 				foreach ($btlSizes as $btl_size => $brands) {
 					foreach ($brands as $key => $qty) {
-						$returnData[$categoryName][$btl_size] += $qty;
+                        $explode_qty = explode('.', $qty);
+						$returnData[$categoryName][$btl_size]['btl'] += $explode_qty[0];
+						$returnData[$categoryName][$btl_size]['peg'] += $explode_qty[1];
 					}
 				}
 
@@ -3544,16 +3598,13 @@ class Reports extends Controller
 				krsort($returnData[$categoryName]);
 			}
 		}
-
 		// Step 3: Convert quantities to bottle-peg format
 		foreach ($returnData as $categoryName => &$btlSizes) {
 			foreach ($btlSizes as $btl_size => &$qty) {
-				$peg_size = DB::table('brands')->where('btl_size', $btl_size)->where('status', 1)->first();
+				$peg_size = DB::table('brands')->where('status',1)->where('btl_size', $btl_size)->where('status', 1)->first();
 
-				$get_btl_and_peg_separated = explode('.', $qty);
-
-				$btl = $get_btl_and_peg_separated[0] ?? 0;
-				$peg = !empty($get_btl_and_peg_separated[1]) ? $get_btl_and_peg_separated[1] : 0;
+				$btl = $returnData[$categoryName][$btl_size]['btl'] ?? 0;
+				$peg = !empty($returnData[$categoryName][$btl_size]['btl']) ? $returnData[$categoryName][$btl_size]['peg'] : 0;
 
 				$qty_in_ml = ($btl * $peg_size->actual_btl_size) + ($peg * ($peg_size->peg_size ?? 0));
 
@@ -3579,6 +3630,7 @@ class Reports extends Controller
     
         // Fetch brand names in a single query
         $brands = DB::table('brands')
+            ->where('status',1)
             ->whereIn('name', array_unique($size_keys))
             ->pluck('short_name', 'name');
     
@@ -3600,6 +3652,7 @@ class Reports extends Controller
     private function convertSimpleKeysToBrandNames(&$data) {
         $keys = array_keys($data);
         $brands = DB::table('brands')
+        ->where('status',1)
             ->whereIn('name', array_unique($keys))
             ->pluck('short_name', 'name');
     
@@ -3676,17 +3729,12 @@ class Reports extends Controller
             $json_data = json_decode($data_value);
             if (!empty($json_data)) {
                 foreach ($json_data as $json_value) {
-                    if($pageNo == 1)
+                    // check if brand is active or not
+                    $brand = Brand::where('id', $json_value->brand_id)->where('status', 1)->first();
+
+                    if(!empty($brand))
                     {
-                        if (in_array($json_value->btl_size, [4500, 2000, 1000, 750, 700, 500])) {
-                            // Collect brand names and bottle sizes under categories
-                            $category_brands[$json_value->category_name][$json_value->btl_size][$json_value->brand_name] = 0.00; // Initialize quantity
-                        }
-                    }else{
-                        if (!in_array($json_value->btl_size, [4500, 2000, 1000, 750, 700, 500])) {
-                            // Collect brand names and bottle sizes under categories
-                            $category_brands[$json_value->category_name][$json_value->btl_size][$json_value->brand_name] = 0.00; // Initialize quantity
-                        }
+                        $category_brands[$json_value->category_name][$json_value->btl_size][$json_value->brand_name] = 0.00; // Initialize quantity
                     }
                 }
             }
@@ -3702,43 +3750,20 @@ class Reports extends Controller
     {
         foreach ($all_category_brands as $category => $btl_sizes) {
             foreach ($btl_sizes as $btl_size => $brands) {
-                if($pageNo == 1)
-                {
-                    if (in_array($btl_size, [4500, 2000, 1000, 750, 700, 500])) {
-                        foreach ($brands as $brand => $_) {
-                            // Initialize data
-                            $opening_data[$category][$btl_size][$brand] = 0.00;
-                            $purchase_data[$category][$btl_size][$brand] = 0.00;
-                            $sales_data[$category][$btl_size][$brand] = 0.00;
-        
-                            // Calculate opening data from last financial year
-                            $this->calculateOpeningData($category, $btl_size, $brand, $openingData, $opening_data);
-        
-                            // Process current financial year data
-                            $this->processTransactionData($all_row_data, $category, $btl_size, $brand, $opening_data, $purchase_data, $sales_data);
-                            
-                            // Calculate closing data as opening + purchase - sales
-                            $closing_data[$category][$btl_size][$brand] = $opening_data[$category][$btl_size][$brand] + $purchase_data[$category][$btl_size][$brand] - $sales_data[$category][$btl_size][$brand];
-                        }
-                    }
-                }else{
-                    if (!in_array($btl_size, [4500, 2000, 1000, 750, 700, 500])) {
-                        foreach ($brands as $brand => $_) {
-                            // Initialize data
-                            $opening_data[$category][$btl_size][$brand] = 0.00;
-                            $purchase_data[$category][$btl_size][$brand] = 0.00;
-                            $sales_data[$category][$btl_size][$brand] = 0.00;
-        
-                            // Calculate opening data from last financial year
-                            $this->calculateOpeningData($category, $btl_size, $brand, $openingData, $opening_data);
-        
-                            // Process current financial year data
-                            $this->processTransactionData($all_row_data, $category, $btl_size, $brand, $opening_data, $purchase_data, $sales_data);
-                            
-                            // Calculate closing data as opening + purchase - sales
-                            $closing_data[$category][$btl_size][$brand] = $opening_data[$category][$btl_size][$brand] + $purchase_data[$category][$btl_size][$brand] - $sales_data[$category][$btl_size][$brand];
-                        }
-                    }
+                foreach ($brands as $brand => $_) {
+                    // Initialize data
+                    $opening_data[$category][$btl_size][$brand] = 0.00;
+                    $purchase_data[$category][$btl_size][$brand] = 0.00;
+                    $sales_data[$category][$btl_size][$brand] = 0.00;
+
+                    // Calculate opening data from last financial year
+                    $this->calculateOpeningData($category, $btl_size, $brand, $openingData, $opening_data);
+
+                    // Process current financial year data
+                    $this->processTransactionData($all_row_data, $category, $btl_size, $brand, $opening_data, $purchase_data, $sales_data);
+                    
+                    // Calculate closing data as opening + purchase - sales
+                    $closing_data[$category][$btl_size][$brand] = $opening_data[$category][$btl_size][$brand] + $purchase_data[$category][$btl_size][$brand] - $sales_data[$category][$btl_size][$brand];
                 }
             }
         }

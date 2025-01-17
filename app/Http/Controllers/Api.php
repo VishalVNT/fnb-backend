@@ -4839,7 +4839,7 @@ class Api extends Controller
     public function bulkStockImport(Request $request)
     {
 
-        error_reporting(0);
+        // error_reporting(0);
         $dataArray = $request->data;
         $company_id = $dataArray[0]['company_id'];
         // $branch_id = $dataArray[0]['branch_id'];
@@ -4851,10 +4851,23 @@ class Api extends Controller
             $brandName = $dataArr['brand'];
             $total = explode('.', $dataArr['total']);
             $btl = intval($total[0]);
-            $peg = intval($total[1]);
+            if (isset($total[1])) {
+                $peg = $total[1];
+            
+                // Check the format of $peg
+                if (strlen($peg) === 2 && $peg[0] === '0') {
+                    // If $peg is in '01/02/.../09', strip the leading zero
+                    $peg = intval($peg);
+                } elseif (strlen($peg) === 1) {
+                    // If $peg is already single-digit, multiply by 10
+                    $peg = intval($peg) * 10;
+                }
+            } else {
+                $peg = 0; // Default value if no $total[1] is present
+            }
             $data['company_id'] = $company_id;
             //$data['branch_id'] = $branch_id;
-            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'actual_btl_size', 'peg_size', 'name')->where([['name', 'like', '%' . $brandName . '%']])->get();
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'actual_btl_size', 'peg_size', 'name')->where([['name', 'like', '%' . $brandName . '%']])->where('brands.status',1)->get();
             if (count($brandSize) > 0) {
                 $count = Stock::where(['company_id' => $company_id, 'brand_id' => $brandSize[0]['id'], 'status' => 1])->get()->count();
                 $MlSize = ($brandSize[0]['actual_btl_size'] * $btl) + ($brandSize[0]['peg_size'] * $peg);
@@ -4874,6 +4887,7 @@ class Api extends Controller
                         $opening['brand_id'] = $brandSize[0]['id'];
                         $opening['qty'] = $MlSize;
                         $opening['store_btl'] = $btl;
+                        $opening['store_peg'] = $peg;
                         $opening['date'] = date('Y-m-d', strtotime($dataArr['date']));
                         $saveOpeningSave = DailyOpening::create($opening);
 
@@ -4883,7 +4897,7 @@ class Api extends Controller
 
                         if (!Schema::hasTable($log_data_table_name)) {
                             Schema::create($log_data_table_name, function (Blueprint $table) {
-                                // Primary Key
+                                // Primary Key 
                                 $table->id();
 
                                 // Other Columns
@@ -4968,6 +4982,7 @@ class Api extends Controller
                     $opening['brand_id'] = $brandSize[0]['id'];
                     $opening['qty'] = $MlSize;
                     $opening['store_btl'] = $btl;
+                    $opening['store_peg'] = $peg;
                     $opening['date'] = date('Y-m-d', strtotime($dataArr['date']));
                     $saveOpeningSave = DailyOpening::create($opening);
 
@@ -5126,7 +5141,7 @@ class Api extends Controller
                     $phy['company_id'] = $company_id;
                     $phy['brand_id'] = $brandSize[0]['id'];
                     $phy['qty'] = $MlSize;
-                    $phy['date'] =  date('Y-m-d', strtotime($dataArr['date']));
+                    $phy['date'] = date('Y-m-d', strtotime($dataArr['date']));
                     $phy['status'] = 1;
                     $phy_save = new physical_history($phy);
                     $phy_save->save();
@@ -5254,7 +5269,7 @@ class Api extends Controller
             $data['vendor_id'] = $supplier[0]['id'];
             $data['company_id'] = $company_id;
             
-            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'actual_btl_size', 'peg_size', 'name')->where([['name', 'like', '%' . $brandName . '%']])->get();
+            $brandSize = Brand::select('id', 'category_id', 'btl_size', 'actual_btl_size', 'peg_size', 'name')->where([['name', 'like', '%' . $brandName . '%']])->where('brands.status',1)->get();
             
             if (count($brandSize) < 1) {
                 $dataArr['reason'] = 'Brand Not Found';
@@ -8820,9 +8835,9 @@ class Api extends Controller
             'company_id' => 'required'
         ]);
         if (!empty($request->keyword))
-            $res = DailyOpening::select('brands.name', 'btl_size', 'brands.actual_btl_size', 'peg_size', 'daily_openings.id','daily_openings.brand_id', 'daily_openings.qty', 'daily_openings.date', 'categories.name as category','daily_openings.store_btl','daily_openings.store_peg','daily_openings.bar1_btl','daily_openings.bar1_peg','daily_openings.bar2_btl','daily_openings.bar2_peg')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], ['brands.name', 'like', '%' . $request->keyword . '%'], 'daily_openings.status' => 1])->get();
+            $res = DailyOpening::select('brands.name', 'btl_size', 'brands.actual_btl_size', 'peg_size', 'daily_openings.id','daily_openings.brand_id', 'daily_openings.qty', 'daily_openings.date', 'categories.name as category','daily_openings.store_btl','daily_openings.store_peg','daily_openings.bar1_btl','daily_openings.bar1_peg','daily_openings.bar2_btl','daily_openings.bar2_peg')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], ['brands.name', 'like', '%' . $request->keyword . '%'], 'daily_openings.status' => 1,'brands.status' => 1])->get();
         else
-            $res = DailyOpening::select('brands.name', 'btl_size', 'brands.actual_btl_size', 'peg_size', 'daily_openings.id','daily_openings.brand_id', 'categories.name as category', 'daily_openings.qty', 'daily_openings.date','daily_openings.store_btl','daily_openings.store_peg','daily_openings.bar1_btl','daily_openings.bar1_peg','daily_openings.bar2_btl','daily_openings.bar2_peg')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], 'daily_openings.status' => 1])->get();
+            $res = DailyOpening::select('brands.name', 'btl_size', 'brands.actual_btl_size', 'peg_size', 'daily_openings.id','daily_openings.brand_id', 'categories.name as category', 'daily_openings.qty', 'daily_openings.date','daily_openings.store_btl','daily_openings.store_peg','daily_openings.bar1_btl','daily_openings.bar1_peg','daily_openings.bar2_btl','daily_openings.bar2_peg')->join('brands', 'brands.id', '=', 'daily_openings.brand_id')->join('categories', 'brands.category_id', '=', 'categories.id')->where(['daily_openings.company_id' => $data['company_id'], 'daily_openings.status' => 1,'brands.status' => 1])->get();
         if ($res) {
             return response()->json($res);
         } else {
